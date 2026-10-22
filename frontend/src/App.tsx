@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AlertDraft, Draft, Market } from "./api";
+import type { AlertDraft, Draft, Market, Timeframe } from "./api";
 import AlertsPage from "./pages/AlertsPage";
 import AssetPage, { type AssetRequest } from "./pages/AssetPage";
 import JournalPage from "./pages/JournalPage";
@@ -25,8 +25,8 @@ export default function App() {
       tab === t ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"
     }`;
 
-  function openAsset(market: Market, symbol: string, setups: string[] = []) {
-    setRequest({ market, symbol, setups, nonce: Date.now() });
+  function openAsset(market: Market, symbol: string, setups: string[] = [], timeframe: Timeframe = "D1") {
+    setRequest({ market, symbol, setups, timeframe, nonce: Date.now() });
     setTab("ativo");
   }
 

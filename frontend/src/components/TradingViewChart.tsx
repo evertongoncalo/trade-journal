@@ -4,7 +4,16 @@ import { useEffect, useRef } from "react";
  * Widget "Advanced Chart" do TradingView (gratuito, hospedado por eles; o script monta o iframe).
  * Só exibição: o app não lê os valores do gráfico nem desenha níveis nele.
  */
-export default function TradingViewChart({ symbol, height = 520 }: { symbol: string; height?: number }) {
+export default function TradingViewChart({
+  symbol,
+  height = 520,
+  interval = "D",
+}: {
+  symbol: string;
+  height?: number;
+  /** "D" (diário) ou "240" (4 horas). */
+  interval?: "D" | "240";
+}) {
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,7 +33,7 @@ export default function TradingViewChart({ symbol, height = 520 }: { symbol: str
     script.innerHTML = JSON.stringify({
       autosize: true,
       symbol,
-      interval: "D",
+      interval,
       timezone: "Etc/UTC",
       theme: "dark",
       style: "1",
@@ -37,7 +46,7 @@ export default function TradingViewChart({ symbol, height = 520 }: { symbol: str
     return () => {
       el.innerHTML = "";
     };
-  }, [symbol]);
+  }, [symbol, interval]);
 
   return (
     <div

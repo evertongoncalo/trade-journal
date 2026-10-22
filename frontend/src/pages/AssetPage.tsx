@@ -11,6 +11,7 @@ import {
   type Market,
   type Probability,
   type ProbLabel,
+  type Timeframe,
 } from "../api";
 import CorrelationPanel from "../components/CorrelationPanel";
 import TradingViewChart from "../components/TradingViewChart";
@@ -31,6 +32,8 @@ export interface AssetRequest {
   market: Market;
   symbol: string;
   setups: string[];
+  /** Timeframe do setup que gerou o achado: o gráfico abre nele (os cálculos da ficha seguem diários). */
+  timeframe?: Timeframe;
   nonce: number;
 }
 
@@ -109,6 +112,7 @@ export default function AssetPage({
   const [setupNames, setSetupNames] = useState<string[]>([]);
   const [ai, setAi] = useState<AiAnalysis | null>(null);
   const [corr, setCorr] = useState<CorrelationData | null>(null);
+  const [chartTf, setChartTf] = useState<Timeframe>("D1");
 
   const analyze = useCallback(async (m: Market, s: string, h: number) => {
     if (!s.trim()) return;
@@ -129,6 +133,7 @@ export default function AssetPage({
   function submit(e: FormEvent) {
     e.preventDefault();
     setSetupNames([]); // busca manual: sem setup de origem
+    setChartTf("D1");
     void analyze(market, symbol, horizon);
   }
 
@@ -138,6 +143,7 @@ export default function AssetPage({
     setMarket(request.market);
     setSymbol(request.symbol);
     setSetupNames(request.setups);
+    setChartTf(request.timeframe ?? "D1");
     void analyze(request.market, request.symbol, horizon);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request, analyze]);
@@ -202,6 +208,7 @@ export default function AssetPage({
           onAlert={() => onAlert({ market: data.market, symbol: data.symbol, price: roundPrice(data.price) })}
           onAnalysis={setAi}
           onCorrelation={setCorr}
+          chartTf={chartTf}
         />
       )}
     </div>
@@ -214,12 +221,14 @@ function AssetView({
   onAlert,
   onAnalysis,
   onCorrelation,
+  chartTf,
 }: {
   data: Asset;
   onRegister: () => void;
   onAlert: () => void;
   onAnalysis: (a: AiAnalysis | null) => void;
   onCorrelation: (c: CorrelationData | null) => void;
+  chartTf: Timeframe;
 }) {
   return (
     <div className="space-y-4">
@@ -242,9 +251,10 @@ function AssetView({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <TradingViewChart symbol={data.tradingview_symbol} />
+          <TradingViewChart symbol={data.tradingview_symbol} interval={chartTf === "H4" ? "240" : "D"} />
           <p className="mt-1 text-[11px] text-zinc-600">
             Gráfico do TradingView ({data.tradingview_symbol}); pode diferir um pouco da fonte dos cálculos.
+            {chartTf === "H4" && " O achado veio de um setup H4: o gráfico abre em 4 horas, mas indicadores, probabilidade e correlação desta ficha são diários."}
           </p>
         </div>
         <div className="space-y-4">

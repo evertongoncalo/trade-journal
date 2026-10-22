@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 
 from .. import db
+from .bars import TIMEFRAMES
 from .conditions import normalize_definition
 from .defaults import DEFAULT_SETUPS
 
@@ -24,6 +25,7 @@ def _setup(row) -> dict:
         "enabled": bool(d["enabled"]),
         "direction": d["direction"],
         "markets": json.loads(d["markets"]),
+        "timeframe": d["timeframe"],
         "definition": json.loads(d["definition_json"]),
         "created_at": d["created_at"],
         "updated_at": d["updated_at"],
@@ -41,28 +43,40 @@ def get_setup(setup_id: int) -> dict | None:
         return _setup(row) if row else None
 
 
-def create_setup(name: str, enabled: bool, direction: str, markets: list[str], definition: dict) -> dict:
+def _check_timeframe(timeframe: str) -> None:
+    if timeframe not in TIMEFRAMES:
+        raise ValueError(f"Timeframe desconhecido: {timeframe!r} (use {' ou '.join(TIMEFRAMES)})")
+
+
+def create_setup(
+    name: str, enabled: bool, direction: str, markets: list[str], definition: dict, timeframe: str = "D1"
+) -> dict:
     definition = normalize_definition(definition)
+    _check_timeframe(timeframe)
     now = _now()
     with db.connect() as con:
         cur = con.execute(
-            "INSERT INTO setups (name, enabled, direction, markets, definition_json, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (name, int(enabled), direction, json.dumps(markets), json.dumps(definition, ensure_ascii=False), now, now),
+            "INSERT INTO setups (name, enabled, direction, markets, definition_json, timeframe, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (name, int(enabled), direction, json.dumps(markets), json.dumps(definition, ensure_ascii=False), timeframe, now, now),
         )
         new_id = int(cur.lastrowid)
     return get_setup(new_id)
 
 
 def update_setup(
-    setup_id: int, name: str, enabled: bool, direction: str, markets: list[str], definition: dict
+    setup_id: int, name: str, enabled: bool, direction: str, markets: list[str], definition: dict, timeframe: str = "D1"
 ) -> dict | None:
     definition = normalize_definition(definition)
+    _check_timeframe(timeframe)
     with db.connect() as con:
         cur = con.execute(
-            "UPDATE setups SET name = ?, enabled = ?, direction = ?, markets = ?, definition_json = ?, updated_at = ? "
-            "WHERE id = ?",
-            (name, int(enabled), direction, json.dumps(markets), json.dumps(definition, ensure_ascii=False), _now(), setup_id),
+            "UPDATE setups SET name = ?, enabled = ?, direction = ?, markets = ?, definition_json = ?, timeframe = ?, "
+            "updated_at = ? WHERE id = ?",
+            (
+                name, int(enabled), direction, json.dumps(markets), json.dumps(definition, ensure_ascii=False),
+                timeframe, _now(), setup_id,
+            ),
         )
         if cur.rowcount == 0:
             return None
@@ -119,14 +133,14 @@ def save_hits(run_id: int, hits: list[dict]) -> None:
     rows = [
         (
             run_id, h["setup_id"], h["setup_name"], h["market"], h["symbol"], h["direction"], h["price"],
-            json.dumps(h["details"], ensure_ascii=False),
+            json.dumps(h["details"], ensure_ascii=False), h.get("timeframe", "D1"),
         )
         for h in hits
     ]
     with db.connect() as con:
         con.executemany(
-            "INSERT INTO scan_hits (run_id, setup_id, setup_name, market, symbol, direction, price, details_json) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO scan_hits (run_id, setup_id, setup_name, market, symbol, direction, price, details_json, timeframe) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
 

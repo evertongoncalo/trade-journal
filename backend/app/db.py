@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS setups (
     direction TEXT NOT NULL,               -- alta | baixa
     markets TEXT NOT NULL,                 -- JSON: ["acoes","cripto","forex"]
     definition_json TEXT NOT NULL,         -- JSON: obrigatórias, confirmações, filtros
+    timeframe TEXT NOT NULL DEFAULT 'D1',  -- D1 | H4
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -79,7 +80,8 @@ CREATE TABLE IF NOT EXISTS scan_hits (
     direction TEXT NOT NULL,
     price REAL,
     details_json TEXT NOT NULL,
-    opened_at TEXT
+    opened_at TEXT,
+    timeframe TEXT NOT NULL DEFAULT 'D1'   -- D1 | H4
 );
 CREATE INDEX IF NOT EXISTS idx_scan_hits_run ON scan_hits (run_id);
 
@@ -152,9 +154,20 @@ def connect():
         con.close()
 
 
+# Colunas acrescentadas depois da primeira versão: bancos antigos ganham a coluna ao iniciar.
+_ADDED_COLUMNS = [
+    ("setups", "timeframe", "TEXT NOT NULL DEFAULT 'D1'"),
+    ("scan_hits", "timeframe", "TEXT NOT NULL DEFAULT 'D1'"),
+]
+
+
 def init_db() -> None:
     with connect() as con:
         con.executescript(SCHEMA)
+        for table, column, ddl in _ADDED_COLUMNS:
+            have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+            if column not in have:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
 def insert_entry(data: dict) -> int:

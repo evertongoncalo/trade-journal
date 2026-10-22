@@ -16,13 +16,13 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 2. **Ativo**: abrir um achado leva à ficha completa (gráfico, indicadores, inclinação probabilística, painel de correlação).
 3. **Diário**: registrar a decisão (entrei / não entrei / observando) com tese, invalidação e alvo; o app acompanha o resultado.
 
-## Status (v0.6)
+## Status (v0.7)
 
 | Pronto | Ainda não |
 |---|---|
-| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis, lista filtrável, falhas reportadas | Memória da IA e pós-mortem |
+| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis em **D1 ou H4**, lista filtrável, falhas reportadas | Memória da IA e pós-mortem |
 | Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Alertas por Telegram ou e-mail |
-| Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Timeframe H4 nos setups |
+| Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | |
 | Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | |
 | Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | |
 | **Alertas de preço:** avulsos e níveis do plano do diário, detecção por máxima/mínima, notificação do Windows | |
@@ -33,14 +33,27 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 
 - **Universo:** 518 ações (listas em `backend/app/scanner/data`, atualizáveis com `scripts/update_universes.py`), as ~60 criptos
   mais líquidas da Binance (volume 24h ≥ US$ 10 mi, sem stablecoins nem tokens alavancados) e 29 pares de forex.
-- **Dados:** diário, ~2 anos, **só barras já fechadas**. Ativos que falham aparecem no resultado ("2 falhas"), nunca em silêncio.
+- **Dados:** diário (~2 anos) e H4 (~1 ano), **só barras já fechadas**. Só baixa o que algum setup habilitado usa: sem setup H4 no
+  mercado, o histórico de 1 hora nem é baixado. Ativos que falham aparecem no resultado ("2 falhas"; as de H4 levam "(H4)"), nunca em silêncio.
+- **Timeframe do setup:** cada setup é D1 ou H4 ("Duplicar em H4" copia um setup para o outro timeframe). No H4, "barras" nas
+  condições são barras de 4 horas e o volume é comparado com o mesmo horário do dia (a manhã de uma ação sempre tem mais volume
+  que a tarde). A grade de 4 horas depende do mercado:
+  - **Ações:** duas barras por pregão, 09:30–13:30 e 13:30–16:00 de Nova York (a segunda tem 2h30; o mesmo corte do TradingView).
+  - **Forex e ouro:** blocos de 4 h a partir das 17:00 de Nova York (17, 21, 01, 05, 09, 13h). É a convenção do dia do forex; a sua
+    corretora pode usar outra grade (por exemplo, relógio do servidor), e aí as barras diferem.
+  - **Cripto:** a grade da Binance (00, 04, 08, 12, 16 e 20 UTC), que já vem em 4 horas.
+  O Yahoo não entrega 4 horas: as barras são montadas a partir das de 1 hora, e uma barra só vale quando a última hora dela já existe
+  (o Yahoo atrasa ouro e índices 10 a 15 minutos).
 - **Setup** = condições obrigatórias (todas) + confirmações (mínimo configurável) + filtros de liquidez (só ações). Catálogo de
   ~20 condições (RSI, MACD, tendência, médias, volume, Bollinger, ATR, distância da máxima...). Condições de volume são
   ignoradas em forex.
-- Os três setups iniciais são as regras do scanner antigo, sem score e em timeframe diário. **O backtest feito antes não achou
-  vantagem sobre entradas aleatórias**: eles existem para você editar e para o diário medir.
+- Os três setups iniciais são as regras do scanner antigo (que usava H4), sem score e em timeframe diário. **O backtest feito antes
+  não achou vantagem sobre entradas aleatórias**: eles existem para você editar e para o diário medir.
 - A primeira varredura real (22/10/2026) levou ~95 s e listou 172 achados em 171 ativos (29% do universo): setups largos listam
-  muito. Aperte as condições ou use os filtros da lista.
+  muito. Aperte as condições ou use os filtros da lista. Com os três setups também em H4, a varredura levou ~150 s e o H4 listou 94
+  ativos (16% do universo).
+- Abrir um achado H4 leva à ficha com o gráfico do TradingView em 4 horas; **indicadores, probabilidade e correlação da ficha
+  continuam diários**.
 
 ### Análise com IA (OpenRouter)
 
@@ -169,7 +182,8 @@ docs/           especificação
   Os dois diferem um pouco.
 - O widget do TradingView é só exibição: o app não lê valores dele nem desenha níveis nele.
 - Barras diárias de forex podem ficar em formação até ~17h de Nova York; o corte do scanner é o último 16:00 de Nova York.
-- O dado de 1 hora do Yahoo vai até ~730 dias; a avaliação do diário usa 1h quando possível e diário como reserva.
+- O dado de 1 hora do Yahoo vai até ~730 dias; a avaliação do diário usa 1h quando possível e diário como reserva. O H4 de ações e
+  forex usa 1 ano dele.
 - O intervalo de confiança da inclinação assume amostras independentes e usa um único ativo: amostras pequenas aparecem como "sem dados".
 
 ## Segurança

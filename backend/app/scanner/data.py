@@ -1,4 +1,4 @@
-"""Download do histórico diário do universo inteiro, só com barras já fechadas.
+"""Download do histórico do universo inteiro (diário e H4), só com barras já fechadas.
 
 Os ativos que falham são devolvidos em `errors` e aparecem no resultado da varredura (o scanner antigo
 engolia esses erros em silêncio).
@@ -17,11 +17,14 @@ import yfinance as yf
 from ..providers.base import COLUMNS, ProviderError
 from ..providers.binance import _get as binance_get
 from ..providers.symbols import yahoo_symbol
+from . import bars
 
 NY = "America/New_York"
 BATCH = 40
 MIN_BARS = 60
 Progress = Callable[[int], None]  # recebe quantos ativos acabaram de ser processados
+H4_PERIOD = "1y"  # ~500 barras H4 em ações, ~1500 em forex (o Yahoo guarda até ~2 anos de dados de 1 hora)
+H4_BINANCE_LIMIT = 1000  # ~167 dias de barras de 4 horas
 
 
 def last_close_cutoff(now: datetime | None = None) -> pd.Timestamp:
@@ -46,8 +49,21 @@ def _clean(d: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame | None:
     return d if len(d) >= MIN_BARS else None
 
 
-def fetch_yahoo_daily(
-    pairs: list[tuple[str, str]], cutoff: pd.Timestamp, progress: Progress | None = None
+def _clean_h4(d: pd.DataFrame, market: str, now: datetime | None) -> pd.DataFrame | None:
+    """Barras de 1 hora do Yahoo -> barras H4 fechadas (ver bars.py)."""
+    d = d[COLUMNS].dropna(subset=["Close"])
+    idx = pd.DatetimeIndex(d.index)
+    d.index = idx.tz_localize("UTC") if idx.tz is None else idx.tz_convert("UTC")
+    h4 = bars.h4_from_hourly(d, market, now)
+    return h4 if len(h4) >= MIN_BARS else None
+
+
+def _fetch_yahoo(
+    pairs: list[tuple[str, str]],
+    period: str,
+    interval: str,
+    clean: Callable[[pd.DataFrame], pd.DataFrame | None],
+    progress: Progress | None,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
     """pairs = [(símbolo de exibição, símbolo no Yahoo)]. Devolve (quadros por símbolo de exibição, erros)."""
     frames: dict[str, pd.DataFrame] = {}
@@ -60,7 +76,7 @@ def fetch_yahoo_daily(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 raw = yf.download(
-                    ysyms, period="2y", interval="1d", progress=False, auto_adjust=True,
+                    ysyms, period=period, interval=interval, progress=False, auto_adjust=True,
                     group_by="ticker", threads=True,
                 )
         except Exception:
@@ -70,14 +86,14 @@ def fetch_yahoo_daily(
             if raw is not None and not raw.empty:
                 try:
                     d = raw[ysym] if isinstance(raw.columns, pd.MultiIndex) else raw
-                    d = _clean(d, cutoff)
+                    d = clean(d)
                 except KeyError:
                     d = None
             if d is None:  # tenta de novo sozinho antes de desistir
                 try:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
-                        d = _clean(yf.Ticker(ysym).history(period="2y", interval="1d", auto_adjust=True), cutoff)
+                        d = clean(yf.Ticker(ysym).history(period=period, interval=interval, auto_adjust=True))
                 except Exception:
                     d = None
             if d is None:
@@ -89,13 +105,25 @@ def fetch_yahoo_daily(
     return frames, errors
 
 
-def _binance_one(symbol: str, now_ms: int) -> pd.DataFrame:
-    rows = binance_get("/api/v3/klines", {"symbol": symbol, "interval": "1d", "limit": 400})
+def fetch_yahoo_daily(
+    pairs: list[tuple[str, str]], cutoff: pd.Timestamp, progress: Progress | None = None
+) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
+    return _fetch_yahoo(pairs, "2y", "1d", lambda d: _clean(d, cutoff), progress)
+
+
+def fetch_yahoo_h4(
+    pairs: list[tuple[str, str]], market: str, now: datetime | None, progress: Progress | None = None
+) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
+    return _fetch_yahoo(pairs, H4_PERIOD, "1h", lambda d: _clean_h4(d, market, now), progress)
+
+
+def _klines_frame(rows: list, now_ms: int) -> pd.DataFrame:
+    """Klines da Binance -> quadro OHLCV (índice = início da barra, UTC), sem a barra ainda em andamento."""
     if not rows:
         raise ProviderError("sem dados")
     df = pd.DataFrame(rows).iloc[:, :7]
     df.columns = ["t", *COLUMNS, "close_time"]
-    df = df[df["close_time"].astype("int64") <= now_ms]  # descarta o dia UTC ainda em andamento
+    df = df[df["close_time"].astype("int64") <= now_ms]  # descarta a barra ainda em andamento
     df.index = pd.to_datetime(df.pop("t"), unit="ms", utc=True)
     df = df.drop(columns="close_time").astype(float)
     if len(df) < MIN_BARS:
@@ -103,21 +131,29 @@ def _binance_one(symbol: str, now_ms: int) -> pd.DataFrame:
     return df
 
 
-def fetch_binance_daily(
-    symbols: list[str], progress: Progress | None = None, workers: int = 8
+def _binance_one(symbol: str, now_ms: int) -> pd.DataFrame:
+    return _klines_frame(binance_get("/api/v3/klines", {"symbol": symbol, "interval": "1d", "limit": 400}), now_ms)
+
+
+def _binance_h4_one(symbol: str, now_ms: int) -> pd.DataFrame:
+    rows = binance_get("/api/v3/klines", {"symbol": symbol, "interval": "4h", "limit": H4_BINANCE_LIMIT})
+    return _klines_frame(rows, now_ms)
+
+
+def _fetch_binance(
+    symbols: list[str], one: Callable[[str], pd.DataFrame], progress: Progress | None, workers: int
 ) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
-    now_ms = int(time.time() * 1000)
     frames: dict[str, pd.DataFrame] = {}
     errors: dict[str, str] = {}
 
-    def one(sym: str):
+    def run(sym: str):
         try:
-            return sym, _binance_one(sym, now_ms), None
+            return sym, one(sym), None
         except Exception as exc:
             return sym, None, str(exc)
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for sym, df, err in pool.map(one, symbols):
+        for sym, df, err in pool.map(run, symbols):
             if df is not None:
                 frames[sym] = df
             else:
@@ -127,6 +163,20 @@ def fetch_binance_daily(
     return frames, errors
 
 
+def fetch_binance_daily(
+    symbols: list[str], progress: Progress | None = None, workers: int = 8
+) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
+    now_ms = int(time.time() * 1000)
+    return _fetch_binance(symbols, lambda sym: _binance_one(sym, now_ms), progress, workers)
+
+
+def fetch_binance_h4(
+    symbols: list[str], progress: Progress | None = None, workers: int = 8
+) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
+    now_ms = int(time.time() * 1000)
+    return _fetch_binance(symbols, lambda sym: _binance_h4_one(sym, now_ms), progress, workers)
+
+
 def fetch_daily(
     market: str, symbols: list[str], progress: Progress | None = None, now: datetime | None = None
 ) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
@@ -134,3 +184,21 @@ def fetch_daily(
         return fetch_binance_daily(symbols, progress)
     pairs = [(s, yahoo_symbol(market, s)[0]) for s in symbols]
     return fetch_yahoo_daily(pairs, last_close_cutoff(now), progress)
+
+
+def fetch_h4(
+    market: str, symbols: list[str], progress: Progress | None = None, now: datetime | None = None
+) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
+    if market == "cripto":
+        return fetch_binance_h4(symbols, progress)
+    pairs = [(s, yahoo_symbol(market, s)[0]) for s in symbols]
+    return fetch_yahoo_h4(pairs, market, now, progress)
+
+
+def fetch(
+    market: str, timeframe: str, symbols: list[str], progress: Progress | None = None, now: datetime | None = None
+) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
+    """Histórico do universo no timeframe pedido ("D1" ou "H4")."""
+    if timeframe == "H4":
+        return fetch_h4(market, symbols, progress, now)
+    return fetch_daily(market, symbols, progress, now)

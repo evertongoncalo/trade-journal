@@ -90,7 +90,7 @@ def test_up_and_down_day():
 
 def test_render_labels():
     assert c.CATALOG["rsi_between"].render({"lo": 40.0, "hi": 60.0}) == "RSI(14) entre 40 e 60"
-    assert c.CATALOG["volume_ratio_above"].render({"x": 1.2}) == "Volume > 1.2× a média de 20 dias"
+    assert c.CATALOG["volume_ratio_above"].render({"x": 1.2}) == "Volume > 1.2× a média de 20 barras"
     assert c.CATALOG["trend_up"].render({}) == "Tendência de alta (preço > MM20 > MM50)"
 
 

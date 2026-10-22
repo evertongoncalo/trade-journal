@@ -8,10 +8,11 @@ import {
   type ScanRun,
   type ScanStatus,
   type Setup,
+  type Timeframe,
 } from "../api";
 import SetupsPanel from "../components/SetupsPanel";
 import { Badge, Card, btnGhost, btnPrimary, inputSm, type Tone } from "../components/ui";
-import { fmtDate, fmtDateTime, fmtNum, fmtPrice } from "../format";
+import { fmtBar, fmtDate, fmtDateTime, fmtNum, fmtPrice } from "../format";
 
 const MARKETS = Object.keys(MARKET_LABEL) as Market[];
 const PAGE = 60;
@@ -37,7 +38,11 @@ interface Row {
   opened: boolean;
 }
 
-export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbol: string, setups: string[]) => void }) {
+export default function ScannerPage({
+  onOpen,
+}: {
+  onOpen: (market: Market, symbol: string, setups: string[], timeframe: Timeframe) => void;
+}) {
   const [latest, setLatest] = useState<{ run: ScanRun | null; hits: ScanHit[] } | null>(null);
   const [status, setStatus] = useState<ScanStatus | null>(null);
   const [catalog, setCatalog] = useState<ConditionSpec[]>([]);
@@ -46,6 +51,7 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
   const [error, setError] = useState<string | null>(null);
 
   const [marketFilter, setMarketFilter] = useState<Market | "todos">("todos");
+  const [tfFilter, setTfFilter] = useState<Timeframe | "todos">("todos");
   const [setupFilter, setSetupFilter] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("conf");
@@ -110,6 +116,7 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
     const map = new Map<string, Row>();
     for (const h of hits) {
       if (marketFilter !== "todos" && h.market !== marketFilter) continue;
+      if (tfFilter !== "todos" && h.timeframe !== tfFilter) continue;
       if (setupFilter.length > 0 && !setupFilter.includes(h.setup_name)) continue;
       if (q && !h.symbol.toLowerCase().includes(q) && !(h.name ?? "").toLowerCase().includes(q)) continue;
       const key = `${h.market}:${h.symbol}`;
@@ -132,7 +139,8 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
       symbol: bySymbol,
     };
     return list.sort(cmp[sort]);
-  }, [hits, marketFilter, setupFilter, query, sort]);
+  }, [hits, marketFilter, tfFilter, setupFilter, query, sort]);
+  const timeframesInRun = useMemo(() => [...new Set(hits.map((h) => h.timeframe))].sort(), [hits]);
 
   function open(r: Row) {
     r.hits.forEach((h) => void api.hitOpened(h.id).catch(() => undefined));
@@ -146,7 +154,7 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
           }
         : cur,
     );
-    onOpen(r.market, r.symbol, r.hits.map((h) => h.setup_name));
+    onOpen(r.market, r.symbol, r.hits.map((h) => h.setup_name), r.hits.every((h) => h.timeframe === "H4") ? "H4" : "D1");
   }
 
   const running = status?.state === "running";
@@ -160,7 +168,7 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
           <div className="max-w-2xl">
             <h2 className="text-lg font-semibold">Scanner</h2>
             <p className="mt-1 text-xs text-zinc-500">
-              Varre o universo inteiro atrás dos seus setups (timeframe diário, só barras já fechadas) e lista o que encontrou.
+              Varre o universo inteiro atrás dos seus setups (diário ou 4 horas, só barras já fechadas) e lista o que encontrou.
               Ações: S&P 500 + Nasdaq-100 · Cripto: as mais líquidas da Binance · Forex: majors, minors e ouro.
             </p>
           </div>
@@ -206,11 +214,15 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
             <Badge>
               {run_.symbols_ok}/{run_.symbols_total} ativos avaliados
             </Badge>
-            {Object.entries(run_.as_of).map(([m, d]) => (
-              <Badge key={m}>
-                {MARKET_LABEL[m as Market]}: barra de {fmtDate(d)}
-              </Badge>
-            ))}
+            {Object.entries(run_.as_of).map(([key, bar]) => {
+              const [m, tf] = key.split(":") as [Market, Timeframe | undefined];
+              return (
+                <Badge key={key}>
+                  {MARKET_LABEL[m]}
+                  {tf ? ` ${tf}` : ""}: barra {tf ? `de ${fmtBar(bar, m)}` : `de ${fmtDate(bar)}`}
+                </Badge>
+              );
+            })}
             {run_.errors_count > 0 && (
               <button className="text-amber-300 hover:underline" onClick={() => setShowErrors((v) => !v)}>
                 {run_.errors_count} {run_.errors_count === 1 ? "falha" : "falhas"} {showErrors ? "▲" : "▼"}
@@ -267,6 +279,25 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
                 </span>
               </button>
             ))}
+            {timeframesInRun.length > 1 && (
+              <>
+                <span className="mx-1 h-4 w-px bg-zinc-700" />
+                {(["todos", ...timeframesInRun] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => {
+                      setTfFilter(t);
+                      setLimit(PAGE);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-xs ${
+                      tfFilter === t ? "border-amber-700 bg-amber-950 text-amber-300" : "border-zinc-700 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    {t === "todos" ? "D1 + H4" : t}
+                  </button>
+                ))}
+              </>
+            )}
             <span className="mx-1 h-4 w-px bg-zinc-700" />
             {setupNames.map((n) => (
               <button
@@ -339,12 +370,16 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
                           {r.hits.map((h) => (
                             <Badge key={h.id} tone={h.direction === "alta" ? "emerald" : "rose"}>
                               {h.setup_name}
+                              {h.timeframe === "H4" && !h.setup_name.includes("H4") && <span className="ml-1 text-[10px] opacity-70">H4</span>}
                             </Badge>
                           ))}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{fmtPrice(r.details.price)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{fmtNum(r.details.rsi14, 1)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {fmtNum(r.details.rsi14, 1)}
+                        {r.details.timeframe === "H4" && <span className="ml-1 text-[10px] text-zinc-500">H4</span>}
+                      </td>
                       <td className="px-3 py-2">
                         <Badge tone={TREND_TONE[r.details.trend] ?? "zinc"}>{r.details.trend}</Badge>
                       </td>
@@ -372,7 +407,10 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
                           <div className="grid gap-3 md:grid-cols-2">
                             {r.hits.map((h) => (
                               <div key={h.id} className="text-xs">
-                                <div className="mb-1 font-medium text-zinc-300">{h.setup_name}</div>
+                                <div className="mb-1 flex items-center gap-2 font-medium text-zinc-300">
+                                  {h.setup_name}
+                                  <Badge tone={h.timeframe === "H4" ? "amber" : "zinc"}>{h.timeframe}</Badge>
+                                </div>
                                 <ul className="space-y-0.5 text-zinc-400">
                                   {h.details.required.map((c) => (
                                     <li key={c}>✓ {c}</li>
@@ -391,9 +429,16 @@ export default function ScannerPage({ onOpen }: { onOpen: (market: Market, symbo
                               </div>
                             ))}
                           </div>
-                          <div className="mt-2 text-[11px] text-zinc-600">
-                            Dados até {fmtDate(r.details.as_of)} · ATR {fmtNum(r.details.atr_pct, 2)}% · Bollinger %B {fmtNum(r.details.bb_pctb, 2)} ·
-                            histograma do MACD {fmtNum(r.details.macd_hist, 4)}
+                          <div className="mt-2 space-y-0.5 text-[11px] text-zinc-600">
+                            {[...new Map(r.hits.map((h) => [h.timeframe, h])).values()].map((h) => (
+                              <div key={h.timeframe}>
+                                {h.timeframe === "H4"
+                                  ? `H4 · barra das ${fmtBar(h.details.as_of, h.market)} (fechou ${fmtBar(h.details.as_of_end, h.market)})`
+                                  : `D1 · dados até ${fmtDate(h.details.as_of)}`}{" "}
+                                · ATR {fmtNum(h.details.atr_pct, 2)}% · Bollinger %B {fmtNum(h.details.bb_pctb, 2)} · histograma do MACD{" "}
+                                {fmtNum(h.details.macd_hist, 4)}
+                              </div>
+                            ))}
                           </div>
                         </td>
                       </tr>

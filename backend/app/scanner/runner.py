@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from . import data, engine, store, universe
+from .bars import TIMEFRAMES
 
 MARKET_LABEL = {"acoes": "Ações", "cripto": "Cripto", "forex": "Forex"}
 
@@ -26,13 +27,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _most_common_date(frames: dict[str, pd.DataFrame]) -> str | None:
-    dates = [df.index[-1].date().isoformat() for df in frames.values() if len(df)]
-    return Counter(dates).most_common(1)[0][0] if dates else None
+def _most_common_bar(frames: dict[str, pd.DataFrame], timeframe: str) -> str | None:
+    """A barra mais comum entre os ativos: a data em D1; o início da barra (UTC, ISO) em H4."""
+    stamp = (lambda ix: ix.date().isoformat()) if timeframe == "D1" else (lambda ix: ix.isoformat())
+    bars = [stamp(df.index[-1]) for df in frames.values() if len(df)]
+    return Counter(bars).most_common(1)[0][0] if bars else None
 
 
 def run_scan(markets: list[str], now: datetime | None = None) -> int:
-    """Varre os mercados pedidos (bloqueante) e grava o resultado. Normalmente roda em thread via start_run()."""
+    """Varre os mercados pedidos (bloqueante) e grava o resultado. Normalmente roda em thread via start_run().
+
+    Só baixa o que algum setup habilitado usa: um mercado sem setup não é baixado, e o histórico H4 só é baixado se
+    houver setup H4 naquele mercado. Os erros de H4 levam o sufixo " (H4)" na chave.
+    """
     setups = [s for s in store.list_setups() if s["enabled"] and set(s["markets"]) & set(markets)]
     run_id = store.create_run(markets, setups)
     _status["run_id"] = run_id
@@ -42,8 +49,11 @@ def run_scan(markets: list[str], now: datetime | None = None) -> int:
     try:
         _status.update(phase="Montando a lista de ativos", done=0, total=0)
         plan = {m: universe.symbols_for(m) for m in markets}
-        total = sum(len(v) for v in plan.values())
-        _status["total"] = total
+        needed = {
+            m: [tf for tf in TIMEFRAMES if any(s["timeframe"] == tf and m in s["markets"] for s in setups)] for m in markets
+        }
+        total = sum(len(plan[m]) for m in markets if needed[m])
+        _status["total"] = sum(len(plan[m]) * len(needed[m]) for m in markets)
 
         counter = [0]
 
@@ -53,13 +63,19 @@ def run_scan(markets: list[str], now: datetime | None = None) -> int:
 
         hits: list[dict] = []
         for market in markets:
-            _status["phase"] = f"Baixando e avaliando: {MARKET_LABEL[market]} ({len(plan[market])} ativos)"
-            frames, errs = data.fetch_daily(market, plan[market], progress, now)
-            errors.update({f"{market}:{sym}": reason for sym, reason in errs.items()})
-            for sym, df in frames.items():
-                ok += 1
-                hits.extend(engine.evaluate_symbol(market, sym, df, setups))
-            as_of[market] = _most_common_date(frames)
+            ok_sets: list[set[str]] = []
+            for tf in needed[market]:
+                where = MARKET_LABEL[market] + ("" if tf == "D1" else f" · {tf}")
+                _status["phase"] = f"Baixando e avaliando: {where} ({len(plan[market])} ativos)"
+                frames, errs = data.fetch(market, tf, plan[market], progress, now)
+                suffix = "" if tf == "D1" else f" ({tf})"
+                errors.update({f"{market}:{sym}{suffix}": reason for sym, reason in errs.items()})
+                for sym, df in frames.items():
+                    hits.extend(engine.evaluate_symbol(market, sym, df, setups, tf))
+                as_of[market if tf == "D1" else f"{market}:{tf}"] = _most_common_bar(frames, tf)
+                ok_sets.append(set(frames))
+            if ok_sets:
+                ok += len(set.intersection(*ok_sets))  # ativo "avaliado" = todos os timeframes usados deram certo
 
         store.save_hits(run_id, hits)
         store.finish_run(run_id, "done", total, ok, errors, as_of)

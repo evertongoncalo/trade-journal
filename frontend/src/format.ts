@@ -36,6 +36,20 @@ export function fmtDate(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "—";
 }
 
+/** Horário de uma barra H4 no fuso da grade do mercado: Nova York para ações e forex, UTC para cripto. */
+export function fmtBar(iso: string | null | undefined, market: string): string {
+  if (!iso) return "—";
+  const crypto = market === "cripto";
+  const text = new Date(iso).toLocaleString("pt-BR", {
+    timeZone: crypto ? "UTC" : "America/New_York",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${text} ${crypto ? "UTC" : "NY"}`;
+}
+
 /** Arredonda um preço para ~6 algarismos significativos (sugestões de nível). */
 export function roundPrice(n: number): number {
   return Number(n.toPrecision(6));

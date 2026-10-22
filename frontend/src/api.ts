@@ -2,6 +2,8 @@ export type Market = "acoes" | "cripto" | "forex";
 export type Decision = "entrei" | "nao_entrei" | "observando";
 export type Direction = "alta" | "baixa";
 export type Status = "aberta" | "alvo" | "invalidada" | "expirada";
+export type Timeframe = "D1" | "H4";
+export const TIMEFRAME_LABEL: Record<Timeframe, string> = { D1: "Diário", H4: "4 horas" };
 export type ProbLabel = "alta" | "baixa" | "indistinta" | "sem dados";
 
 export const MARKET_LABEL: Record<Market, string> = { acoes: "Ações", cripto: "Cripto", forex: "Forex" };
@@ -170,6 +172,7 @@ export interface Setup {
   enabled: boolean;
   direction: Direction;
   markets: Market[];
+  timeframe: Timeframe;
   definition: SetupDefinition;
 }
 
@@ -183,12 +186,17 @@ export interface ScanHit {
   market: Market;
   symbol: string;
   direction: Direction;
+  timeframe: Timeframe;
   price: number | null;
   name: string | null;
   opened_at: string | null;
   details: {
     price: number;
+    timeframe: Timeframe;
+    /** D1: a data da barra. H4: o início da barra (UTC, ISO). */
     as_of: string;
+    /** Só em H4: o fim da barra (UTC, ISO). */
+    as_of_end: string | null;
     rsi14: number | null;
     macd_hist: number | null;
     trend: string;

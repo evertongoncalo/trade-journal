@@ -7,6 +7,8 @@ import {
   type Market,
   type Setup,
   type SetupCondition,
+  type Timeframe,
+  TIMEFRAME_LABEL,
 } from "../api";
 import { Badge, Card, Field, btnGhost, btnPrimary, inputCls, inputSm } from "./ui";
 
@@ -22,6 +24,7 @@ interface Draft {
   enabled: boolean;
   direction: Direction;
   markets: Market[];
+  timeframe: Timeframe;
   required: CondDraft[];
   confirmations: CondDraft[];
   minConfirmations: string;
@@ -31,7 +34,13 @@ interface Draft {
 
 const num = (s: string) => Number(s.replace(",", "."));
 
-function toDraft(s: Setup | null, catalog: ConditionSpec[]): Draft {
+/** Uma cópia de um setup, já no outro timeframe: o caminho curto para ter a versão H4 (ou D1) das mesmas condições. */
+interface Copy {
+  from: Setup;
+  timeframe: Timeframe;
+}
+
+function toDraft(s: Setup | null, catalog: ConditionSpec[], copy?: Copy): Draft {
   const conv = (c: SetupCondition): CondDraft => ({
     type: c.type,
     params: Object.fromEntries(Object.entries(c.params).map(([k, v]) => [k, String(v)])),
@@ -43,6 +52,7 @@ function toDraft(s: Setup | null, catalog: ConditionSpec[]): Draft {
       enabled: true,
       direction: "alta",
       markets: [...MARKETS],
+      timeframe: "D1",
       required: first ? [defaultCond(first)] : [],
       confirmations: [],
       minConfirmations: "0",
@@ -52,10 +62,11 @@ function toDraft(s: Setup | null, catalog: ConditionSpec[]): Draft {
   }
   const f = s.definition.filters;
   return {
-    name: s.name,
+    name: copy ? `${s.name} (${copy.timeframe})` : s.name,
     enabled: s.enabled,
     direction: s.direction,
     markets: s.markets,
+    timeframe: copy ? copy.timeframe : s.timeframe,
     required: s.definition.required.map(conv),
     confirmations: s.definition.confirmations.map(conv),
     minConfirmations: String(s.definition.min_confirmations),
@@ -84,7 +95,7 @@ export default function SetupsPanel({
   catalog: ConditionSpec[];
   onChanged: () => void;
 }) {
-  const [editing, setEditing] = useState<Setup | "new" | null>(null);
+  const [editing, setEditing] = useState<Setup | "new" | Copy | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function toggle(s: Setup) {
@@ -111,16 +122,22 @@ export default function SetupsPanel({
   return (
     <Card title="Setups">
       <p className="mb-3 text-xs text-zinc-500">
-        Um setup é um conjunto de condições na última barra diária fechada: todas as obrigatórias precisam bater, mais um
-        mínimo das confirmações. Os três iniciais vêm das regras do scanner antigo (sem score, em timeframe diário). Não há
-        evidência de que elas superem o acaso: o diário é que vai medir.
+        Um setup é um conjunto de condições na última barra fechada do timeframe escolhido (diário ou 4 horas): todas as
+        obrigatórias precisam bater, mais um mínimo das confirmações. Os três iniciais vêm das regras do scanner antigo (sem
+        score, em timeframe diário). Não há evidência de que elas superem o acaso: o diário é que vai medir.
+      </p>
+      <p className="mb-3 text-xs text-zinc-500">
+        <span className="text-zinc-400">Barras de 4 horas:</span> ações usam 09:30–13:30 e 13:30–16:00 (Nova York); forex e ouro,
+        blocos de 4 h a partir das 17:00 de Nova York; cripto, a grade UTC da Binance (00, 04, 08, 12, 16, 20). Só entram barras já
+        fechadas. Nas condições, "barras" são dias em D1 e barras de 4 h em H4, e o volume em H4 é comparado com o mesmo horário do dia.
       </p>
       {error && <p className="mb-3 rounded-md border border-rose-900 bg-rose-950/50 p-2 text-sm text-rose-300">{error}</p>}
 
       {editing ? (
         <SetupEditor
-          key={editing === "new" ? "new" : editing.id}
-          initial={editing === "new" ? null : editing}
+          key={editing === "new" ? "new" : "from" in editing ? `copy:${editing.from.id}` : editing.id}
+          initial={editing === "new" || "from" in editing ? null : editing}
+          copy={editing !== "new" && "from" in editing ? editing : undefined}
           catalog={catalog}
           onCancel={() => setEditing(null)}
           onSaved={() => {
@@ -137,6 +154,7 @@ export default function SetupsPanel({
                   <label className="flex items-center gap-2 text-sm font-medium">
                     <input type="checkbox" checked={s.enabled} onChange={() => void toggle(s)} />
                     {s.name}
+                    <Badge tone={s.timeframe === "H4" ? "amber" : "zinc"}>{s.timeframe}</Badge>
                     <Badge tone={s.direction === "alta" ? "emerald" : "rose"}>{s.direction}</Badge>
                     {s.markets.map((m) => (
                       <Badge key={m}>{MARKET_LABEL[m]}</Badge>
@@ -145,6 +163,13 @@ export default function SetupsPanel({
                   <span className="flex gap-3 text-xs">
                     <button className="text-sky-400 hover:underline" onClick={() => setEditing(s)}>
                       Editar
+                    </button>
+                    <button
+                      className="text-sky-400 hover:underline"
+                      title="Abre um novo setup com as mesmas condições no outro timeframe"
+                      onClick={() => setEditing({ from: s, timeframe: s.timeframe === "H4" ? "D1" : "H4" })}
+                    >
+                      Duplicar em {s.timeframe === "H4" ? "D1" : "H4"}
                     </button>
                     <button className="text-zinc-500 hover:text-rose-400" onClick={() => void remove(s)}>
                       Excluir
@@ -182,16 +207,18 @@ export default function SetupsPanel({
 
 function SetupEditor({
   initial,
+  copy,
   catalog,
   onCancel,
   onSaved,
 }: {
   initial: Setup | null;
+  copy?: Copy;
   catalog: ConditionSpec[];
   onCancel: () => void;
   onSaved: () => void;
 }) {
-  const [d, setD] = useState<Draft>(() => toDraft(initial, catalog));
+  const [d, setD] = useState<Draft>(() => toDraft(initial ?? copy?.from ?? null, catalog, copy));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
@@ -212,6 +239,7 @@ function SetupEditor({
         enabled: d.enabled,
         direction: d.direction,
         markets: d.markets,
+        timeframe: d.timeframe,
         definition: {
           required: d.required.map(conv),
           confirmations: d.confirmations.map(conv),
@@ -229,7 +257,7 @@ function SetupEditor({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Field label="Nome" className="md:col-span-2">
           <input className={inputCls} value={d.name} onChange={(e) => set("name", e.target.value)} />
         </Field>
@@ -237,6 +265,15 @@ function SetupEditor({
           <select className={inputCls} value={d.direction} onChange={(e) => set("direction", e.target.value as Direction)}>
             <option value="alta">Alta</option>
             <option value="baixa">Baixa</option>
+          </select>
+        </Field>
+        <Field label="Timeframe">
+          <select className={inputCls} value={d.timeframe} onChange={(e) => set("timeframe", e.target.value as Timeframe)}>
+            {(Object.keys(TIMEFRAME_LABEL) as Timeframe[]).map((t) => (
+              <option key={t} value={t}>
+                {t} · {TIMEFRAME_LABEL[t]}
+              </option>
+            ))}
           </select>
         </Field>
         <div className="text-xs text-zinc-400">

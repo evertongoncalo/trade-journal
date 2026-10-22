@@ -38,6 +38,7 @@ class SetupIn(BaseModel):
     enabled: bool = True
     direction: Literal["alta", "baixa"]
     markets: list[Market] = Field(min_length=1)
+    timeframe: Literal["D1", "H4"] = "D1"
     definition: DefinitionIn
 
 
@@ -58,7 +59,9 @@ def list_setups():
 @router.post("/setups", status_code=201)
 def create_setup(body: SetupIn):
     try:
-        return store.create_setup(body.name, body.enabled, body.direction, body.markets, body.definition.model_dump())
+        return store.create_setup(
+            body.name, body.enabled, body.direction, body.markets, body.definition.model_dump(), body.timeframe
+        )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -67,7 +70,7 @@ def create_setup(body: SetupIn):
 def update_setup(setup_id: int, body: SetupIn):
     try:
         updated = store.update_setup(
-            setup_id, body.name, body.enabled, body.direction, body.markets, body.definition.model_dump()
+            setup_id, body.name, body.enabled, body.direction, body.markets, body.definition.model_dump(), body.timeframe
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc

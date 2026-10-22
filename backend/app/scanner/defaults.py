@@ -2,7 +2,7 @@
 
 Diferenças em relação ao antigo, de propósito:
 - sem score: cada condição aparece como bateu ou não bateu;
-- timeframe diário (o antigo usava RSI/MACD em H4; H4 ainda não existe aqui);
+- timeframe diário (o antigo usava RSI/MACD em H4): para ter a versão H4 de um setup, use "Duplicar em H4" na tela de setups;
 - o antigo exigia "RSI + (MACD ou tendência)": aqui isso vira obrigatória + confirmações com mínimo.
 
 O backtest feito antes mostrou que as regras antigas não superaram entradas aleatórias; os setups existem para o

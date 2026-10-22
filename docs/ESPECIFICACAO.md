@@ -54,10 +54,34 @@ Implementação (v0.3): o scanner é a porta de entrada do app (aba inicial).
   Ativos que falham são listados no resultado, nunca engolidos (defeito do scanner antigo).
 - Setup = condições obrigatórias (todas) + confirmações (mínimo configurável) + filtros de liquidez (só ações). Catálogo de ~20
   condições; as de volume são ignoradas em forex.
-- Os 3 setups iniciais traduzem o scanner antigo sem score e em timeframe diário (o antigo usava RSI/MACD em H4; H4 ainda não
-  existe aqui). Sem evidência de que superem o acaso (seção 14).
+- Os 3 setups iniciais traduzem o scanner antigo sem score e em timeframe diário (o antigo usava RSI/MACD em H4; o H4 veio na
+  v0.7, ver abaixo). Sem evidência de que superem o acaso (seção 14).
 - Primeira varredura real (2026-10-22): 601 ativos em 95 s; 172 achados em 171 ativos (29% do universo). Setups largos listam muito.
 - Resultados ficam no SQLite (varredura + achados). Abrir um achado registra a abertura e leva o nome do setup ao diário.
+
+Implementação (v0.7): **timeframe H4 nos setups** (cada setup é D1 ou H4; coluna `timeframe` em `setups` e `scan_hits`, com migração
+automática de bancos antigos, que ficam D1).
+- Dados: o Yahoo não tem 4 horas, então as barras H4 de ações e forex são montadas das de 1 hora (~1 ano). Cripto usa as barras de
+  4 horas da própria Binance (1000 barras, ~167 dias). Medido em 2026-10-22: 40 ações em 1 hora levam ~6 s por lote (o universo
+  todo, ~80 s); a varredura D1 + H4 completa levou 152 s para 600 ativos, 597 avaliados e 4 falhas (tickers com histórico curto).
+- Grades (decisão, ver `scanner/bars.py`): ações em duas barras por pregão, 09:30–13:30 e 13:30–16:00 NY (o corte do TradingView);
+  forex e ouro em blocos de 4 h ancorados às 17:00 NY, que é o início do dia do forex (a grade da corretora do usuário pode diferir;
+  pendência já registrada na seção 17); cripto na grade UTC da Binance. A grade do forex segue o relógio de Nova York, então desloca 1 h
+  em UTC na troca de horário; o mercado está fechado nessas trocas (domingo), por isso não gera barra torta.
+- **Só barras fechadas**: a última barra só vale se o relógio já passou do fim dela e se existe a barra de 1 hora que cobre o
+  último trecho (o Yahoo atrasa ouro e índices 10 a 15 minutos; sem essa checagem nasceria uma barra sem a última hora). Teste de
+  mutação: desligar a regra derruba os testes.
+- Volume em H4 é comparado com as barras do MESMO horário do dia (média de 20): sem isso a barra da manhã de uma ação pareceria sempre
+  "volume alto" e a da tarde sempre "baixo". O filtro de liquidez das ações continua em volume financeiro POR DIA (soma das barras do
+  dia), não por barra. Os textos das condições passaram a falar em "barras" (1 barra = 1 dia em D1, 4 h em H4).
+- A varredura só baixa o que algum setup habilitado do mercado usa. `as_of` ganha chaves `mercado:H4` (início da barra, UTC) e os
+  erros de H4 levam o sufixo " (H4)". `symbols_ok` conta o ativo como avaliado só se todos os timeframes usados deram certo.
+- Tela: seletor de timeframe no editor, selo D1/H4 nos setups e achados, filtro D1/H4 na lista, "Duplicar em H4" para copiar um setup,
+  horário da barra no fuso da grade (NY ou UTC). Abrir um achado H4 abre o gráfico do TradingView em 4 horas; a ficha (indicadores,
+  probabilidade, correlação) segue diária.
+- Verificação: barras conferidas à mão contra as barras de 1 hora (NVDA, EURUSD, ouro) e RSI/preço de um achado real (DHR H4) idênticos
+  a uma reconstrução independente (laço manual + RSI de Wilder escrito à mão). Ainda não se mediu se H4 acerta mais ou menos do que D1:
+  isso é para o diário e a Revisão responderem.
 
 ## 5. Análise por código (botão "Analisar", sem IA)
 
@@ -323,7 +347,7 @@ reais são mais largos — não tratar como evidência. Consequência para o des
 1. Ficha do ativo (iframe + dados + indicadores + painel de correlação + viés por bloco) e diário com acompanhamento automático de resultado.
 2. Botão de IA com as lentes.
 3. Radar/funil diário com setups definidos pelo usuário.
-4. Painel de revisão (acerto por bloco/lente) e alertas de preço. *(feito: v0.4 alertas, v0.6 revisão)*
+4. Painel de revisão (acerto por bloco/lente) e alertas de preço. *(feito: v0.4 alertas, v0.6 revisão; H4 nos setups: v0.7)*
 5. Memória: pós-mortem, recuperação e alertas estatísticos (depende de casos fechados).
 
 ## 17. Em aberto

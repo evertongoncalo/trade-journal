@@ -1,4 +1,5 @@
-"""Catálogo de condições dos setups. Cada condição olha a última barra diária fechada (e a anterior).
+"""Catálogo de condições dos setups. Cada condição olha a última barra fechada (e a anterior) do timeframe do setup:
+diária (D1) ou de 4 horas (H4). Por isso os textos falam em "barras": 1 barra = 1 dia em D1 e 4 horas em H4.
 
 `fn(d, p)` recebe o DataFrame de features (ver engine.features) e os parâmetros; devolve True/False, ou None
 quando falta dado (ex.: indicador ainda sem histórico). Condições que dependem de volume são "não aplicáveis"
@@ -30,9 +31,11 @@ class Condition:
     fn: Callable[[pd.DataFrame, dict], bool | None]
     params: tuple[Param, ...] = field(default_factory=tuple)
     needs_volume: bool = False
+    label_h4: str | None = None  # texto próprio para H4, quando a leitura muda (ex.: volume contra o mesmo horário)
 
-    def render(self, p: dict) -> str:
-        return self.label.format(**{k: _fmt(v) for k, v in p.items()})
+    def render(self, p: dict, timeframe: str = "D1") -> str:
+        label = self.label_h4 if timeframe == "H4" and self.label_h4 else self.label
+        return label.format(**{k: _fmt(v) for k, v in p.items()})
 
 
 def _fmt(v: float) -> str:
@@ -179,20 +182,21 @@ CONDITIONS: list[Condition] = [
     Condition("rsi_between", "RSI entre", "RSI(14) entre {lo} e {hi}", rsi_between, (_LO100, _HI100)),
     Condition("rsi_cross_up", "RSI cruza para cima", "RSI(14) cruzou {level} para cima", rsi_cross_up, (_LEVEL,)),
     Condition("rsi_cross_down", "RSI cruza para baixo", "RSI(14) cruzou {level} para baixo", rsi_cross_down, (_LEVEL,)),
-    Condition("rsi_rising", "RSI subindo", "RSI subindo (hoje > ontem)", rsi_rising),
-    Condition("rsi_falling", "RSI caindo", "RSI caindo (hoje < ontem)", rsi_falling),
+    Condition("rsi_rising", "RSI subindo", "RSI subindo (barra atual > anterior)", rsi_rising),
+    Condition("rsi_falling", "RSI caindo", "RSI caindo (barra atual < anterior)", rsi_falling),
     Condition("macd_above_signal", "MACD acima do sinal", "MACD acima da linha de sinal", macd_above_signal),
     Condition("macd_below_signal", "MACD abaixo do sinal", "MACD abaixo da linha de sinal", macd_below_signal),
-    Condition("macd_cross_up", "MACD cruza para cima", "MACD cruzou o sinal para cima hoje", macd_cross_up),
-    Condition("macd_cross_down", "MACD cruza para baixo", "MACD cruzou o sinal para baixo hoje", macd_cross_down),
+    Condition("macd_cross_up", "MACD cruza para cima", "MACD cruzou o sinal para cima na última barra", macd_cross_up),
+    Condition("macd_cross_down", "MACD cruza para baixo", "MACD cruzou o sinal para baixo na última barra", macd_cross_down),
     Condition("macd_hist_rising", "Histograma do MACD subindo", "Histograma do MACD subindo", macd_hist_rising),
     Condition("trend_up", "Tendência de alta", "Tendência de alta (preço > MM20 > MM50)", trend_up),
     Condition("trend_down", "Tendência de baixa", "Tendência de baixa (preço < MM20 < MM50)", trend_down),
     Condition("close_above_sma", "Preço acima da média", "Preço acima da MM{n}", close_above_sma, (_N,)),
     Condition("close_below_sma", "Preço abaixo da média", "Preço abaixo da MM{n}", close_below_sma, (_N,)),
     Condition(
-        "volume_ratio_above", "Volume acima da média", "Volume > {x}× a média de 20 dias", volume_ratio_above,
+        "volume_ratio_above", "Volume acima da média", "Volume > {x}× a média de 20 barras", volume_ratio_above,
         (Param("x", "múltiplo", 1.2, 0.1, 0.1, 20),), needs_volume=True,
+        label_h4="Volume > {x}× a média das 20 últimas barras do mesmo horário",
     ),
     Condition(
         "bb_pctb_between", "Bollinger %B entre", "Bollinger %B entre {lo} e {hi}", bb_pctb_between,
@@ -203,16 +207,16 @@ CONDITIONS: list[Condition] = [
         (Param("lo", "mín. (%)", 0.5, 0.1, 0), Param("hi", "máx. (%)", 6, 0.1, 0)),
     ),
     Condition(
-        "near_high", "Perto da máxima", "Preço a até {within_pct}% da máxima de {lookback} dias", near_high,
-        (Param("lookback", "dias", 252, 1, 5, 500), Param("within_pct", "até (%)", 5, 0.5, 0, 100)),
+        "near_high", "Perto da máxima", "Preço a até {within_pct}% da máxima das últimas {lookback} barras", near_high,
+        (Param("lookback", "barras", 252, 1, 5, 500), Param("within_pct", "até (%)", 5, 0.5, 0, 100)),
     ),
     Condition(
-        "pullback_from_high", "Recuo desde a máxima", "Recuo de {min_pct}% a {max_pct}% desde a máxima de {lookback} dias",
+        "pullback_from_high", "Recuo desde a máxima", "Recuo de {min_pct}% a {max_pct}% desde a máxima das últimas {lookback} barras",
         pullback_from_high,
-        (Param("lookback", "dias", 20, 1, 5, 500), Param("min_pct", "mín. (%)", 3, 0.5, 0), Param("max_pct", "máx. (%)", 10, 0.5, 0)),
+        (Param("lookback", "barras", 20, 1, 5, 500), Param("min_pct", "mín. (%)", 3, 0.5, 0), Param("max_pct", "máx. (%)", 10, 0.5, 0)),
     ),
-    Condition("up_day", "Dia de alta", "Fechou em alta (hoje > ontem)", up_day),
-    Condition("down_day", "Dia de baixa", "Fechou em baixa (hoje < ontem)", down_day),
+    Condition("up_day", "Barra de alta", "Fechou em alta (barra atual > anterior)", up_day),
+    Condition("down_day", "Barra de baixa", "Fechou em baixa (barra atual < anterior)", down_day),
 ]
 
 CATALOG: dict[str, Condition] = {c.id: c for c in CONDITIONS}
