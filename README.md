@@ -16,16 +16,16 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 2. **Ativo**: abrir um achado leva à ficha completa (gráfico, indicadores, inclinação probabilística, painel de correlação).
 3. **Diário**: registrar a decisão (entrei / não entrei / observando) com tese, invalidação e alvo; o app acompanha o resultado.
 
-## Status (v0.8)
+## Status (v0.9)
 
 | Pronto | Ainda não |
 |---|---|
-| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis em **D1 ou H4**, lista filtrável, falhas reportadas | Alertas por Telegram ou e-mail |
+| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis em **D1 ou H4**, lista filtrável, falhas reportadas | Alertas por e-mail |
 | Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | |
 | Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | |
 | Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | |
 | Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | |
-| **Alertas de preço:** avulsos e níveis do plano do diário, detecção por máxima/mínima, notificação do Windows | |
+| **Alertas de preço:** avulsos e níveis do plano do diário, detecção por máxima/mínima, notificação do Windows e **mensagem no Telegram** | |
 | **Análise com IA (OpenRouter):** lentes por mercado, prompt fixo versionado, saída em JSON, citações conferidas por código, sem veredito global | |
 | **Revisão do acerto:** por decisão, mercado, setup, bloco de código, lente de IA e respostas dos alertas, sempre com n e intervalo | |
 | **Memória da IA:** pós-mortem com causa em lista fixa, casos parecidos (na ficha e, opcionalmente, na análise com IA) e alertas estatísticos só por código | |
@@ -116,6 +116,7 @@ A IA não aprende sozinha: o app lembra por ela, em três partes. A aba **Memór
   cancelado; encerrar a tese, sair antes ou excluir o registro também cancela.
 - **Detecção pela máxima e pela mínima** das barras de 1 minuto: um pavio que toca o nível dispara, mesmo se o fechamento
   ficou do outro lado. Cada alerta dispara uma vez.
+- **Telegram** (opcional, além do toast; ver abaixo).
 - **Notificação do Windows** (toast via PowerShell; clicar abre o app). Use "Testar notificação" na aba Alertas. O modo
   "Não incomodar" do Windows manda o aviso direto para a central de notificações.
 - Ao disparar, o app pergunta o que você fez (entrei / ignorei / observando); o contador de pendentes aparece na aba.
@@ -142,6 +143,28 @@ resolvidas aparece esmaecida e abaixo de 30 vem com aviso. Não há score nem ve
   teses abertas** atualiza os desfechos antes de olhar a revisão.
 - **Cuidado com a leitura:** são dezenas de comparações, então algumas vão parecer distinguíveis só por acaso; só vale o que se
   repete em registros novos. Boa decisão com resultado ruim existe, e o quadro não separa uma da outra.
+
+### Alertas no Telegram
+
+Cada alerta que dispara vira também uma mensagem num **bot que você cria** (o app não tem bot próprio e só envia: não lê nem responde ao que você escrever).
+
+1. No Telegram, abra o **@BotFather**, envie `/newbot` e siga os passos: ele devolve um **token**.
+2. Cole no `.env` como `TELEGRAM_BOT_TOKEN=...` e **reinicie o app**.
+3. Mande qualquer mensagem ao seu bot (por exemplo `/start`).
+4. Na aba **Alertas → Alertas no Telegram**, clique em "Procurar conversas" e vincule **a sua** (o app lista as conversas em vez de pegar a mais
+   recente: qualquer pessoa que descubra o bot pode escrever a ele, e só a conversa vinculada recebe os alertas). Ele manda uma mensagem de
+   confirmação nessa conversa. Use "Enviar mensagem de teste" para conferir. Alternativa: `TELEGRAM_CHAT_ID` no `.env`.
+
+- **A mensagem** traz o tipo (alerta de preço, entrada, invalidação ou alvo), o ativo, o nível, o extremo tocado e o horário da barra, a nota e um
+  lembrete para responder no app. Se o app só percebeu o toque bem depois (estava desligado ou o dado atrasou), diz isso.
+- **Privacidade:** a mensagem passa pelos servidores do Telegram (não é ponta a ponta). A nota dos alertas do plano começa com um trecho da tese:
+  desmarque "Incluir a nota do alerta" se não quiser isso fora do computador.
+- **O token** fica só no `.env`: nunca vai ao navegador, ao banco, ao git nem a mensagens de erro (o app o apaga de qualquer erro, porque a
+  URL da API do Telegram o carrega). Só o id da conversa vinculada fica no banco.
+- **Falhas:** o toast do Windows e o registro no app seguem mesmo se o Telegram falhar. A mensagem que falhou é reenviada com espera crescente
+  (1, 2, 5, 15 e 60 min; até 6 tentativas, só para alertas das últimas 24 h) e vai marcada como "Reenviada". Cada alerta mostra se o Telegram
+  saiu ou falhou. Ligar o Telegram depois não reenvia alertas antigos.
+- Como o resto da vigilância, **só funciona com o app aberto**.
 
 ### Painel de correlação
 
@@ -202,7 +225,7 @@ backend/app/
   journal/      avaliação do plano de uma tese (alvo × invalidação × horizonte, em R)
   review/       revisão do acerto: regras de leitura dos blocos e estatística por grupo
   memory/       memória da IA: causas fixas, caminho do preço, pós-mortem, casos parecidos, alertas estatísticos
-  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts, /api/ai, /api/review, /api/memory)
+  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts, /api/ai, /api/review, /api/memory, /api/telegram)
 backend/scripts/ atualização das listas de ações
 frontend/src/   React + TypeScript + Tailwind, tema escuro
 docs/           especificação
@@ -222,4 +245,4 @@ docs/           especificação
 
 ## Segurança
 
-Chaves (futuras: Anthropic, Telegram) vão em `.env` (modelo em `.env.example`), nunca no git.
+Chaves (a da OpenRouter e o token do bot do Telegram) vão em `.env` (modelo em `.env.example`), nunca no git.

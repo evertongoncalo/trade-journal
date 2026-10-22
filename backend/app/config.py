@@ -41,4 +41,9 @@ AI_TIMEOUT_SECONDS = float(os.environ.get("AI_TIMEOUT_SECONDS", "120"))
 ALERTS_WATCHER = os.environ.get("ALERTS_WATCHER", "1") != "0"
 ALERT_POLL_SECONDS = float(os.environ.get("ALERT_POLL_SECONDS", "60"))
 APP_URL = os.environ.get("APP_URL", "http://127.0.0.1:8765/")  # aberto ao clicar na notificação
+
+# Alertas no Telegram: o token é do bot que o usuário cria no @BotFather; fica só no .env, nunca no git nem no navegador.
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()  # opcional: o vínculo também pode ser feito na tela
+TELEGRAM_API_URL = os.environ.get("TELEGRAM_API_URL", "https://api.telegram.org").strip()
 FRONTEND_DIST = _path("FRONTEND_DIST", "frontend/dist")

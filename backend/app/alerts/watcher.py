@@ -15,10 +15,11 @@ from typing import Callable
 import pandas as pd
 
 from .. import config
-from . import evaluate, notify, prices, store
+from . import evaluate, notify, prices, store, telegram
 
 Fetch = Callable[[str, str, datetime, datetime], tuple[pd.DataFrame, str]]
 Notifier = Callable[[str, str, str | None], tuple[bool, str]]
+Telegram = Callable[[dict, dict], tuple[bool, str] | None]  # (alerta, toque) -> (ok, detalhe); None = envio desligado
 
 _cycle_lock = threading.Lock()
 _stop = threading.Event()
@@ -38,19 +39,30 @@ def toast_text(alert: dict, hit: dict) -> tuple[str, str]:
     verb = "subiu até" if alert["direction"] == "acima" else "caiu até"
     side = "Máxima" if alert["direction"] == "acima" else "Mínima"
     when = hit["bar"].astimezone().strftime("%d/%m %H:%M")
-    body = f"{side} de {hit['extreme']:g} na barra de {when}."
+    body = f"{side} de {telegram.fmt_price(hit['extreme'])} na barra de {when}."
     if alert["note"]:
         body += f" {alert['note']}"
-    return f"{alert['symbol']} {verb} {alert['price']:g}", body
+    return f"{alert['symbol']} {verb} {telegram.fmt_price(alert['price'])}", body
 
 
 def check_once(
-    now: datetime | None = None, fetch: Fetch | None = None, notifier: Notifier | None = None
+    now: datetime | None = None,
+    fetch: Fetch | None = None,
+    notifier: Notifier | None = None,
+    telegram_sender: Telegram | None = None,
+    telegram_retry: Callable[[datetime, set[int]], int] | None = None,
 ) -> list[dict]:
-    """Um ciclo de vigilância. Devolve os alertas que dispararam."""
+    """Um ciclo de vigilância. Devolve os alertas que dispararam.
+
+    Cada disparo vira um toast do Windows e, se o Telegram estiver configurado, uma mensagem no bot. Os dois são independentes:
+    um falhar não impede o outro, e nenhum impede o registro do disparo. Mensagens do Telegram que falharam são reenviadas
+    nos ciclos seguintes.
+    """
     now = now or datetime.now(timezone.utc)
     fetch = fetch or prices.fetch_window
     notifier = notifier or notify.send
+    telegram_sender = telegram_sender or telegram.notify_alert
+    telegram_retry = telegram_retry or telegram.retry_failed
     fired: list[dict] = []
     errors: dict[str, str] = {}
 
@@ -85,7 +97,15 @@ def check_once(
                 title, body = toast_text(alert, hit)
                 ok, detail = notifier(title, body, config.APP_URL)
                 store.set_notified(alert["id"], ok, detail)
+                sent = telegram_sender(store.get(alert["id"]), hit)  # relê: `triggered_at` já foi gravado
+                if sent is not None:
+                    store.set_telegram(alert["id"], *sent, at=now)
                 fired.append(store.get(alert["id"]))
+
+        try:
+            telegram_retry(now, {a["id"] for a in fired})  # os de agora já foram tentados neste ciclo
+        except Exception as exc:  # reenviar é um extra: não pode derrubar o ciclo
+            errors["telegram"] = telegram.scrub(exc)
 
     _state.update(
         last_cycle_at=now.isoformat(), cycles=_state["cycles"] + 1, errors=errors,

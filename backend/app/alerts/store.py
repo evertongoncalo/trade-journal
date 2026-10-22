@@ -15,6 +15,7 @@ def _present(row) -> dict:
     last = d.get("last_price")
     d["distance_pct"] = (d["price"] - last) / last * 100 if last else None  # quanto falta até o nível
     d["notify_ok"] = None if d["notify_ok"] is None else bool(d["notify_ok"])
+    d["telegram_ok"] = None if d["telegram_ok"] is None else bool(d["telegram_ok"])
     return d
 
 
@@ -82,6 +83,30 @@ def set_notified(alert_id: int, ok: bool, detail: str) -> None:
             "UPDATE alerts SET notified_at = ?, notify_ok = ?, notify_detail = ? WHERE id = ?",
             (_now(), int(ok), detail[:300], alert_id),
         )
+
+
+def set_telegram(alert_id: int, ok: bool, detail: str, at: datetime | None = None) -> None:
+    """Registra uma tentativa de envio ao Telegram (conta a tentativa; o detalhe nunca traz o token).
+
+    `at` é o relógio do ciclo da vigilância, para a espera entre tentativas usar a mesma régua.
+    """
+    with db.connect() as con:
+        con.execute(
+            "UPDATE alerts SET telegram_ok = ?, telegram_detail = ?, telegram_at = ?, telegram_tries = telegram_tries + 1 "
+            "WHERE id = ?",
+            (int(ok), detail[:300], (at.isoformat() if at else _now()), alert_id),
+        )
+
+
+def telegram_failed(triggered_since, max_tries: int) -> list[dict]:
+    """Alertas disparados cuja última tentativa ao Telegram falhou e que ainda cabem em novas tentativas."""
+    with db.connect() as con:
+        rows = con.execute(
+            "SELECT * FROM alerts WHERE status = 'disparado' AND telegram_ok = 0 AND telegram_tries < ? AND triggered_at >= ? "
+            "AND trigger_bar IS NOT NULL ORDER BY id",
+            (max_tries, triggered_since.isoformat()),
+        ).fetchall()
+    return [_present(r) for r in rows]
 
 
 def touch(alert_id: int, checked_until: str | None, last_price: float | None) -> None:

@@ -365,6 +365,11 @@ export interface PriceAlert {
   notified_at: string | null;
   notify_ok: boolean | null;
   notify_detail: string | null;
+  /** Telegram: null = não tentado (envio desligado); true = enviado; false = falhou (o app reenvia com espera crescente). */
+  telegram_ok: boolean | null;
+  telegram_detail: string | null;
+  telegram_at: string | null;
+  telegram_tries: number;
   response: AlertResponse | null;
   response_note: string | null;
   response_at: string | null;
@@ -383,6 +388,25 @@ export interface AlertsStatus {
     errors: Record<string, string>;
   };
   notifications: { available: boolean; detail: string };
+  telegram: { configured: boolean; ready: boolean };
+}
+
+export interface TelegramStatus {
+  token_configured: boolean;
+  bot: { username: string | null; name: string | null } | null;
+  error: string | null;
+  chat: { id: string; label: string | null; source: "env" | "app" } | null;
+  enabled: boolean;
+  include_note: boolean;
+  ready: boolean;
+}
+
+export interface TelegramChat {
+  chat_id: number;
+  tipo: "privado" | "grupo";
+  rotulo: string;
+  ultima_mensagem: string;
+  quando: string;
 }
 
 export interface NewAlert {
@@ -769,6 +793,14 @@ export const api = {
     request<PriceAlert>(`/api/alerts/${id}/respond`, { method: "POST", body: JSON.stringify({ response }) }),
   deleteAlert: (id: number) => request<void>(`/api/alerts/${id}`, { method: "DELETE" }),
   checkAlertsNow: () => request<{ fired: PriceAlert[] }>("/api/alerts/check", { method: "POST" }),
+  telegramStatus: () => request<TelegramStatus>("/api/telegram/status"),
+  telegramDiscover: () => request<{ chats: TelegramChat[] }>("/api/telegram/discover", { method: "POST" }),
+  telegramLink: (chatId: number) =>
+    request<TelegramStatus>("/api/telegram/link", { method: "POST", body: JSON.stringify({ chat_id: chatId }) }),
+  telegramUnlink: () => request<TelegramStatus>("/api/telegram/link", { method: "DELETE" }),
+  telegramOptions: (body: { enabled?: boolean; include_note?: boolean }) =>
+    request<TelegramStatus>("/api/telegram/options", { method: "POST", body: JSON.stringify(body) }),
+  telegramTest: () => request<{ ok: boolean }>("/api/telegram/test", { method: "POST" }),
   testNotification: () => request<{ ok: boolean; detail: string }>("/api/alerts/test-notification", { method: "POST" }),
   refresh: () => request<RefreshResult>("/api/journal/refresh", { method: "POST" }),
   earlyExit: (id: number, price: number, reason: string) =>

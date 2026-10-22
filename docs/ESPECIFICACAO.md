@@ -279,7 +279,25 @@ Implementação (v0.8): aba **Memória**, cartão "Memória do diário" na ficha
 - Ao disparar: grava hora e preço e pergunta o que o usuário fez (entrei / ignorei).
 - Detecção por máxima/mínima do intervalo, não só pelo último preço.
 - **O atraso do alerta é o atraso do dado.** Para preço exato é preciso fonte em tempo real.
-- Só dispara com o app ligado. Notificação no Windows; opcional: bot do Telegram (token criado pelo usuário).
+- Só dispara com o app ligado. Notificação no Windows; opcional: bot do Telegram (token criado pelo usuário; implementado na v0.9).
+
+Implementação (v0.9): **Telegram** (`alerts/telegram.py`, `routes/telegram.py`).
+- Cada disparo vira, além do toast do Windows, uma mensagem num bot do usuário (token em `TELEGRAM_BOT_TOKEN` no `.env`). O app só ENVIA
+  (`sendMessage`, HTML com todo texto livre escapado); não faz polling nem responde a comandos. Cliente por `urllib`, sem dependências.
+- **Vínculo do chat** (decisão): o usuário escreve ao bot, o app lista as conversas vistas por `getUpdates` e o usuário ESCOLHE; o app não pega a mais
+  recente, para que um desconhecido que ache o bot não sequestre os avisos. `link` só aceita um chat da lista e confirma com uma mensagem nele.
+  O id vai para uma tabela `settings` (chave/valor, sem segredos); `TELEGRAM_CHAT_ID` no `.env` tem prioridade.
+- **Token**: só no `.env`. Nunca em resposta da API, no banco, em log nem em erro: a URL da API o carrega, então toda exceção é reescrita sem a
+  causa original (`raise ... from None`) e o texto passa por `scrub`. Teste: o token não aparece em nenhuma resposta, e remover o `scrub` derruba 3 testes.
+- **Independência**: toast e Telegram são independentes entre si e do registro do disparo; erro de rede ou do Telegram nunca derruba o ciclo.
+  Colunas novas em `alerts`: `telegram_ok` (NULL = não tentado), `telegram_detail`, `telegram_at`, `telegram_tries` (migração automática).
+- **Reenvio**: espera crescente de 1, 2, 5, 15 e 60 min entre tentativas, no máximo 6 no total, só para alertas disparados nas últimas 24 h,
+  usando o relógio do ciclo da vigilância. Defeito achado no teste e corrigido: a primeira versão reenviava no mesmo ciclo da falha. Ligar o Telegram
+  depois não reenvia o que disparou antes (`telegram_ok` NULL não é "falhou").
+- Preço sem notação científica e sem perder casas (o `:g` virava 81180.23 em 81180.2); o toast passou a usar o mesmo formato.
+- Verificado com HTTP real contra um servidor que imita a API do Bot: vínculo escolhendo a conversa certa entre duas, mensagem de teste, alerta real
+  de BTC e ETH disparado por barras reais da Binance, falha simulada (403) e reenvio depois da espera, token ausente do banco e do log. **Nenhuma
+  mensagem foi enviada ao Telegram de verdade**: o primeiro envio real, com o bot do usuário, ainda precisa ser conferido (formato HTML no aplicativo, notificação no celular).
 
 Implementação (v0.4):
 - A vigilância roda dentro do servidor (thread em segundo plano, a cada 60 s; `ALERT_POLL_SECONDS`). Só vigia com o app ligado;

@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import config
-from ..alerts import notify, service, store, watcher
+from ..alerts import notify, service, store, telegram, watcher
 from ..providers.base import ProviderError
 from ..providers.symbols import SymbolError, normalize
 from ..util import clean_json
@@ -50,7 +50,12 @@ def create_alert(body: AlertIn):
 def status():
     ok, detail = notify.available()
     return clean_json(
-        {**store.counts(), "watcher": watcher.status(), "notifications": {"available": ok, "detail": detail}}
+        {
+            **store.counts(),
+            "watcher": watcher.status(),
+            "notifications": {"available": ok, "detail": detail},
+            "telegram": {"configured": bool(telegram.token()), "ready": telegram.ready()},  # sem rede: só lê a configuração
+        }
     )
 
 

@@ -10,6 +10,7 @@ import {
   type Market,
   type PriceAlert,
 } from "../api";
+import TelegramCard from "../components/TelegramCard";
 import { Badge, Card, Field, btnGhost, btnPrimary, inputCls, type Tone } from "../components/ui";
 import { fmtDateTime, fmtNum, fmtPrice } from "../format";
 
@@ -28,6 +29,23 @@ const RESPONSES: { value: AlertResponse; label: string }[] = [
 const POLL_MS = 15000;
 
 const arrow = (d: AlertDirection) => (d === "acima" ? "↑" : "↓");
+const TELEGRAM_MAX_TRIES = 6; // espelha MAX_TRIES do backend
+
+/** Como a mensagem do Telegram deste alerta saiu (nada aparece se o envio estava desligado). */
+function TelegramBadge({ a }: { a: PriceAlert }) {
+  if (a.telegram_ok === true) return <Badge tone="sky">Telegram enviado</Badge>;
+  if (a.telegram_ok === false) {
+    const more = a.telegram_tries < TELEGRAM_MAX_TRIES;
+    return (
+      <span title={a.telegram_detail ?? undefined}>
+        <Badge tone="amber">
+          Telegram falhou ({a.telegram_tries}/{TELEGRAM_MAX_TRIES}){more ? ", tentando de novo" : ""}
+        </Badge>
+      </span>
+    );
+  }
+  return null;
+}
 
 export default function AlertsPage({
   draft,
@@ -143,6 +161,8 @@ export default function AlertsPage({
         )}
       </Card>
 
+      <TelegramCard onChanged={() => void load().catch(() => undefined)} />
+
       {msg && (
         <p
           className={`rounded-md border p-3 text-sm ${
@@ -212,7 +232,9 @@ export default function AlertsPage({
                     </span>
                   </span>
                   {a.notify_ok === false && <Badge tone="amber">notificação falhou</Badge>}
+                  <TelegramBadge a={a} />
                 </div>
+                {a.telegram_ok === false && a.telegram_detail && <div className="mt-1 text-xs text-amber-300">{a.telegram_detail}</div>}
                 {a.note && <div className="mt-1 text-xs text-zinc-400">{a.note}</div>}
                 <div className="mt-2 flex gap-2">
                   {RESPONSES.map((r) => (
@@ -295,6 +317,8 @@ export default function AlertsPage({
                 {a.status === "disparado" ? (
                   <span className="text-xs text-zinc-500">
                     tocou em {fmtDateTime(a.trigger_bar)} · você: <b className="text-zinc-300">{a.response}</b>
+                    {a.telegram_ok === true && " · Telegram ✓"}
+                    {a.telegram_ok === false && " · Telegram ✗"}
                   </span>
                 ) : (
                   <span className="text-xs text-zinc-600">cancelado · {a.cancel_reason}</span>

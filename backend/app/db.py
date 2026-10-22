@@ -110,10 +110,20 @@ CREATE TABLE IF NOT EXISTS alerts (
     response TEXT,                         -- o que o usuário fez: entrei | ignorei | observando
     response_note TEXT,
     response_at TEXT,
-    cancel_reason TEXT
+    cancel_reason TEXT,
+    telegram_ok INTEGER,                   -- NULL: não tentado (envio desligado); 1: enviado; 0: falhou
+    telegram_detail TEXT,
+    telegram_at TEXT,                      -- última tentativa
+    telegram_tries INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts (status);
 CREATE INDEX IF NOT EXISTS idx_alerts_entry ON alerts (entry_id);
+
+-- Configurações do app (sem segredos: o token do Telegram fica só no .env).
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 
 -- Análises com IA: o pacote enviado e a resposta de cada lente ficam guardados (auditoria e futura memória).
 CREATE TABLE IF NOT EXISTS ai_analyses (
@@ -179,6 +189,10 @@ def connect():
 _ADDED_COLUMNS = [
     ("setups", "timeframe", "TEXT NOT NULL DEFAULT 'D1'"),
     ("scan_hits", "timeframe", "TEXT NOT NULL DEFAULT 'D1'"),
+    ("alerts", "telegram_ok", "INTEGER"),
+    ("alerts", "telegram_detail", "TEXT"),
+    ("alerts", "telegram_at", "TEXT"),
+    ("alerts", "telegram_tries", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
