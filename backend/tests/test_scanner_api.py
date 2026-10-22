@@ -36,7 +36,7 @@ def test_catalog_lists_conditions_with_params(client):
 
 def test_default_setups_exist_after_startup(client):
     names = [s["name"] for s in client.get("/api/scanner/setups").json()]
-    assert "Pullback em tendência de alta" in names and len(names) == 3
+    assert "Pullback em tendência de alta" in names and "Pullback em tendência de alta (H4)" in names and len(names) == 6
 
 
 def test_setup_crud(client):

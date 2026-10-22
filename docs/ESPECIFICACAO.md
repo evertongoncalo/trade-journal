@@ -76,6 +76,11 @@ automática de bancos antigos, que ficam D1).
   dia), não por barra. Os textos das condições passaram a falar em "barras" (1 barra = 1 dia em D1, 4 h em H4).
 - A varredura só baixa o que algum setup habilitado do mercado usa. `as_of` ganha chaves `mercado:H4` (início da barra, UTC) e os
   erros de H4 levam o sufixo " (H4)". `symbols_ok` conta o ativo como avaliado só se todos os timeframes usados deram certo.
+- **Setups iniciais nos dois timeframes** (pedido do usuário depois de ver só o D1 na lista): `ensure_default_setups` cria os três em D1 e os três
+  em H4 (mesmas condições e filtros, nome com " (H4)"). Em bancos que já tinham os três diários, as versões H4 são criadas UMA vez (marca
+  `defaults_h4_added` na tabela `settings`), só para os que ainda existem com o nome original e a partir das regras ORIGINAIS (o que o usuário
+  editou nos diários não é copiado); apagar um H4 de propósito não o traz de volta. Conferido numa cópia do banco real: 3 setups viram 6, e
+  uma segunda inicialização não duplica.
 - Tela: seletor de timeframe no editor, selo D1/H4 nos setups e achados, filtro D1/H4 na lista, "Duplicar em H4" para copiar um setup,
   horário da barra no fuso da grade (NY ou UTC). Abrir um achado H4 abre o gráfico do TradingView em 4 horas; a ficha (indicadores,
   probabilidade, correlação) segue diária.

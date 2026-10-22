@@ -48,8 +48,11 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 - **Setup** = condições obrigatórias (todas) + confirmações (mínimo configurável) + filtros de liquidez (só ações). Catálogo de
   ~20 condições (RSI, MACD, tendência, médias, volume, Bollinger, ATR, distância da máxima...). Condições de volume são
   ignoradas em forex.
-- Os três setups iniciais são as regras do scanner antigo (que usava H4), sem score e em timeframe diário. **O backtest feito antes
-  não achou vantagem sobre entradas aleatórias**: eles existem para você editar e para o diário medir.
+- Os três setups iniciais são as regras do scanner antigo (que usava H4), sem score, e **existem nos dois timeframes**: D1 (o nome original) e
+  H4 (o mesmo nome com "(H4)"), com as mesmas condições e filtros. Quem já tinha os três diários ganha as versões H4 uma única vez, só dos que
+  ainda existem com o nome original; se você apagar um H4 de propósito, ele não volta. A varredura fica mais longa com o H4 ligado
+  (~150 s em vez de ~95 s para o universo todo): desmarque os H4 em "Setups" se não quiser. **O backtest feito antes não achou vantagem sobre
+  entradas aleatórias**: eles existem para você editar e para o diário medir.
 - A primeira varredura real (22/10/2026) levou ~95 s e listou 172 achados em 171 ativos (29% do universo): setups largos listam
   muito. Aperte as condições ou use os filtros da lista. Com os três setups também em H4, a varredura levou ~150 s e o H4 listou 94
   ativos (16% do universo).

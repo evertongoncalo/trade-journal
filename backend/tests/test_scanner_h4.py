@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 from app import db
 from app.main import app
 from app.providers.base import ProviderError
+from app import settings
 from app.scanner import bars, data, engine, runner, store, universe
+from app.scanner.defaults import DEFAULT_SETUPS, DEFAULT_SETUPS_H4
 from app.scanner.conditions import CATALOG, normalize_definition
 
 NY = "America/New_York"
@@ -330,7 +332,8 @@ SETUP_BODY = {
 
 
 def test_api_setup_timeframe_roundtrip(client):
-    assert {s["timeframe"] for s in client.get("/api/scanner/setups").json()} == {"D1"}  # os três iniciais seguem diários
+    initial = client.get("/api/scanner/setups").json()
+    assert sorted(s["timeframe"] for s in initial) == ["D1"] * 3 + ["H4"] * 3  # os três iniciais, nos dois timeframes
     created = client.post("/api/scanner/setups", json=SETUP_BODY)
     assert created.status_code == 201 and created.json()["timeframe"] == "H4"
     sid = created.json()["id"]
@@ -404,3 +407,74 @@ def test_run_scan_with_both_timeframes_marks_an_asset_ok_only_if_both_worked(tmp
     assert run["symbols_total"] == 2 and run["symbols_ok"] == 1  # GBPUSD falhou em H4
     assert run["errors_count"] == 1 and "forex:GBPUSD (H4)" in run["errors"]
     assert runner.status()["total"] == 4 and runner.status()["done"] == 4  # 2 ativos x 2 timeframes
+
+
+# ---------- setups iniciais também em H4 ----------
+
+
+def _wipe():
+    for s in store.list_setups():
+        store.delete_setup(s["id"])
+
+
+def _d1_defaults_only():
+    """Um banco como o de antes da v0.7: só os três diários, sem a marca de que as versões H4 foram criadas."""
+    _wipe()
+    settings.delete(store.H4_DEFAULTS_FLAG)
+    for s in DEFAULT_SETUPS:
+        store._create_default(s)
+
+
+def test_a_new_database_gets_each_default_in_d1_and_h4_with_the_same_rules(tmp_db):
+    _wipe()
+    settings.delete(store.H4_DEFAULTS_FLAG)
+    store.ensure_default_setups()
+    store.ensure_default_setups()  # não duplica
+    by_name = {s["name"]: s for s in store.list_setups()}
+    assert len(by_name) == 6
+    for d1 in DEFAULT_SETUPS:
+        h4 = by_name[d1["name"] + " (H4)"]
+        orig = by_name[d1["name"]]
+        assert (orig["timeframe"], h4["timeframe"]) == ("D1", "H4")
+        assert h4["enabled"] and h4["direction"] == orig["direction"] and h4["markets"] == orig["markets"]
+        assert h4["definition"] == orig["definition"]  # mesmas condições e filtros; só muda o timeframe
+
+
+def test_an_existing_database_gets_the_h4_versions_once_and_never_again(tmp_db):
+    _d1_defaults_only()
+    custom = store.create_setup("Meu setup", True, "alta", ["acoes"], DEF)
+    store.ensure_default_setups()
+    names = {s["name"] for s in store.list_setups()}
+    assert names == {*(s["name"] for s in DEFAULT_SETUPS), *(s["name"] for s in DEFAULT_SETUPS_H4), "Meu setup"}
+    assert store.get_setup(custom["id"])["timeframe"] == "D1"  # o que é seu não muda
+
+    gone = next(s for s in store.list_setups() if s["name"] == "Momentum em zona neutra (H4)")
+    store.delete_setup(gone["id"])  # você apaga um H4 de propósito...
+    store.ensure_default_setups()
+    store.ensure_default_setups()
+    assert "Momentum em zona neutra (H4)" not in {s["name"] for s in store.list_setups()}  # ...e ele não volta
+
+
+def test_only_defaults_that_still_exist_get_an_h4_copy_and_the_copy_uses_the_original_rules(tmp_db):
+    _d1_defaults_only()
+    momentum = next(s for s in store.list_setups() if s["name"] == "Momentum em zona neutra")
+    store.delete_setup(momentum["id"])  # você tinha apagado esse D1: não faz sentido ganhar o H4
+    pullback = next(s for s in store.list_setups() if s["name"] == "Pullback em tendência de alta")
+    edited = {**pullback["definition"], "required": [{"type": "trend_up", "params": {}}]}
+    store.update_setup(pullback["id"], pullback["name"], True, "alta", pullback["markets"], edited)  # você editou este
+    renamed = next(s for s in store.list_setups() if s["name"] == "Recuperação de sobrevenda")
+    store.update_setup(renamed["id"], "Meu rebote", True, "alta", renamed["markets"], renamed["definition"])  # e renomeou este
+    store.ensure_default_setups()
+    by_name = {s["name"]: s for s in store.list_setups()}
+    assert "Momentum em zona neutra (H4)" not in by_name and "Recuperação de sobrevenda (H4)" not in by_name
+    h4 = by_name["Pullback em tendência de alta (H4)"]
+    original = next(s for s in DEFAULT_SETUPS if s["name"] == "Pullback em tendência de alta")
+    assert h4["definition"]["required"] == normalize_definition(original["definition"])["required"]  # as regras originais
+    assert by_name["Pullback em tendência de alta"]["definition"]["required"] == edited["required"]  # o D1 editado segue seu
+
+
+def test_the_default_h4_setups_are_independent_copies_of_the_d1_ones():
+    for d1, h4 in zip(DEFAULT_SETUPS, DEFAULT_SETUPS_H4):
+        assert h4["name"] == d1["name"] + " (H4)" and h4["timeframe"] == "H4"
+        assert h4["definition"] == d1["definition"] and h4["definition"] is not d1["definition"]
+        assert h4["definition"]["required"] is not d1["definition"]["required"]

@@ -4,7 +4,7 @@ import pytest
 
 from app import db
 from app.scanner import data, runner, store, universe
-from app.scanner.defaults import DEFAULT_SETUPS
+from app.scanner.defaults import DEFAULT_SETUPS, DEFAULT_SETUPS_H4
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +33,7 @@ def test_default_setups_are_created_once():
     store.ensure_default_setups()
     store.ensure_default_setups()
     setups = store.list_setups()
-    assert [s["name"] for s in setups] == [s["name"] for s in DEFAULT_SETUPS]
+    assert [s["name"] for s in setups] == [s["name"] for s in [*DEFAULT_SETUPS, *DEFAULT_SETUPS_H4]]  # D1 e H4
     assert all(s["enabled"] and s["definition"]["filters"]["min_price"] == 5 for s in setups)
 
 

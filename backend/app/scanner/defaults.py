@@ -2,13 +2,15 @@
 
 Diferenças em relação ao antigo, de propósito:
 - sem score: cada condição aparece como bateu ou não bateu;
-- timeframe diário (o antigo usava RSI/MACD em H4): para ter a versão H4 de um setup, use "Duplicar em H4" na tela de setups;
+- o antigo usava RSI/MACD em H4: aqui cada regra existe nos dois timeframes, D1 (o nome original) e H4 (o mesmo nome com " (H4)");
 - o antigo exigia "RSI + (MACD ou tendência)": aqui isso vira obrigatória + confirmações com mínimo.
 
 O backtest feito antes mostrou que as regras antigas não superaram entradas aleatórias; os setups existem para o
 usuário editar e para o diário medir, não como promessa.
 """
 from __future__ import annotations
+
+import copy
 
 _FILTERS = {"min_price": 5, "min_dollar_volume": 20_000_000}  # só ações: preço > US$ 5 e liquidez mínima
 _ALL = ["acoes", "cripto", "forex"]
@@ -68,3 +70,14 @@ DEFAULT_SETUPS: list[dict] = [
         },
     },
 ]
+
+
+H4_SUFFIX = " (H4)"
+
+
+def h4_variant(setup: dict) -> dict:
+    """O mesmo setup em barras de 4 horas: mesmas condições, mesmos filtros, nome com o sufixo " (H4)"."""
+    return {**copy.deepcopy(setup), "name": setup["name"] + H4_SUFFIX, "timeframe": "H4"}
+
+
+DEFAULT_SETUPS_H4: list[dict] = [h4_variant(s) for s in DEFAULT_SETUPS]

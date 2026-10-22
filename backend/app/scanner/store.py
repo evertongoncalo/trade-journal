@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from .. import db
 from .bars import TIMEFRAMES
 from .conditions import normalize_definition
-from .defaults import DEFAULT_SETUPS
+from .. import settings
+from .defaults import DEFAULT_SETUPS, DEFAULT_SETUPS_H4, H4_SUFFIX
 
 
 def _now() -> str:
@@ -88,13 +89,31 @@ def delete_setup(setup_id: int) -> bool:
         return con.execute("DELETE FROM setups WHERE id = ?", (setup_id,)).rowcount > 0
 
 
+H4_DEFAULTS_FLAG = "defaults_h4_added"  # as versões H4 dos setups iniciais são criadas UMA vez
+
+
+def _create_default(s: dict) -> None:
+    create_setup(s["name"], s["enabled"], s["direction"], s["markets"], s["definition"], s.get("timeframe", "D1"))
+
+
 def ensure_default_setups() -> None:
-    """Na primeira execução, cria os setups iniciais (regras do scanner antigo)."""
+    """Cria os setups iniciais (regras do scanner antigo), nos dois timeframes: D1 e H4.
+
+    Banco novo: os seis. Banco que já tinha os três diários: ganha as versões H4 uma única vez, só dos que ainda existem com o
+    nome original, e nunca mais (se você apagar um H4 de propósito, ele não volta).
+    """
     with db.connect() as con:
         empty = con.execute("SELECT COUNT(*) FROM setups").fetchone()[0] == 0
     if empty:
-        for s in DEFAULT_SETUPS:
-            create_setup(s["name"], s["enabled"], s["direction"], s["markets"], s["definition"])
+        for s in [*DEFAULT_SETUPS, *DEFAULT_SETUPS_H4]:
+            _create_default(s)
+        settings.set(H4_DEFAULTS_FLAG, "1")
+    elif settings.get(H4_DEFAULTS_FLAG) is None:
+        have = {s["name"] for s in list_setups()}
+        for s in DEFAULT_SETUPS_H4:
+            if s["name"][: -len(H4_SUFFIX)] in have and s["name"] not in have:
+                _create_default(s)
+        settings.set(H4_DEFAULTS_FLAG, "1")
 
 
 # ---------- varreduras e resultados ----------

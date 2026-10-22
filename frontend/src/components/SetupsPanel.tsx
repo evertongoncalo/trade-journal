@@ -123,8 +123,8 @@ export default function SetupsPanel({
     <Card title="Setups">
       <p className="mb-3 text-xs text-zinc-500">
         Um setup é um conjunto de condições na última barra fechada do timeframe escolhido (diário ou 4 horas): todas as
-        obrigatórias precisam bater, mais um mínimo das confirmações. Os três iniciais vêm das regras do scanner antigo (sem
-        score, em timeframe diário). Não há evidência de que elas superem o acaso: o diário é que vai medir.
+        obrigatórias precisam bater, mais um mínimo das confirmações. Os iniciais vêm das regras do scanner antigo (sem score) e
+        existem em D1 e em H4 (o nome com "(H4)"). Não há evidência de que elas superem o acaso: o diário é que vai medir.
       </p>
       <p className="mb-3 text-xs text-zinc-500">
         <span className="text-zinc-400">Barras de 4 horas:</span> ações usam 09:30–13:30 e 13:30–16:00 (Nova York); forex e ouro,
