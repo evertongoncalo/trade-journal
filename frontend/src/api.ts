@@ -372,6 +372,65 @@ export interface NewAlert {
   note: string;
 }
 
+export type Stance = "para_alta" | "para_baixa" | "indistinta" | "sem_dados";
+
+export interface AiEvidence {
+  campo: string;
+  valor: string;
+  leitura: string;
+  aponta_para: "alta" | "baixa" | "neutro";
+  verificada: boolean | null;
+  motivo_da_verificacao: string;
+}
+
+export interface AiLensOutput {
+  inclinacao: Stance;
+  confianca: "baixa" | "media" | "alta";
+  resumo: string;
+  evidencias: AiEvidence[];
+  lacunas: string[];
+  mudaria_a_conclusao: string[];
+}
+
+export interface AiLens {
+  lente: string;
+  titulo: string;
+  status: "ok" | "erro";
+  resultado?: AiLensOutput;
+  citacoes?: { total: number; conferem: number; nao_conferem: number };
+  erro?: { tipo: string; mensagem: string };
+  uso: { prompt_tokens: number | null; completion_tokens: number | null; cost: number | null } | null;
+  duracao_ms: number;
+}
+
+export interface AiAnalysis {
+  id: number;
+  created_at: string;
+  market: Market;
+  symbol: string;
+  horizon_days: number;
+  prompt_version: string;
+  prompt_fingerprint: string;
+  model: string;
+  effort: string | null;
+  lenses: AiLens[];
+  cost_usd: number | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  duration_ms: number | null;
+  package?: unknown;
+}
+
+export interface AiStatus {
+  configured: boolean;
+  model: string;
+  effort: string | null;
+  prompt_version: string;
+  prompt_fingerprint: string;
+  lenses: Record<Market, { id: string; title: string }[]>;
+  avg_cost_usd: number | null;
+}
+
 /** Pedido para abrir o formulário de alerta já preenchido (vem da ficha do ativo). */
 export interface AlertDraft {
   market: Market;
@@ -405,6 +464,14 @@ export const api = {
       "/api/journal",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  aiStatus: () => request<AiStatus>("/api/ai/status"),
+  aiAnalyze: (market: Market, symbol: string, horizon: number) =>
+    request<AiAnalysis>("/api/ai/analyze", { method: "POST", body: JSON.stringify({ market, symbol, horizon }) }),
+  aiAnalyses: (market: Market, symbol: string) =>
+    request<AiAnalysis[]>(`/api/ai/analyses?market=${market}&symbol=${encodeURIComponent(symbol)}`),
+  aiAnalysis: (id: number) => request<AiAnalysis>(`/api/ai/analyses/${id}`),
+  aiPrompts: () =>
+    request<{ version: string; fingerprint: string; prompts: Record<string, Record<string, string>> }>("/api/ai/prompts"),
   alerts: () => request<PriceAlert[]>("/api/alerts"),
   alertsStatus: () => request<AlertsStatus>("/api/alerts/status"),
   createAlert: (body: NewAlert) => request<PriceAlert>("/api/alerts", { method: "POST", body: JSON.stringify(body) }),

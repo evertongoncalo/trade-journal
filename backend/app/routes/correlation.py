@@ -3,10 +3,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from ..correlation import engine, store, universe
-from ..providers import registry
+from ..correlation import service, store
 from ..providers.base import ProviderError
-from ..providers.symbols import SymbolError, normalize, yahoo_symbol
+from ..providers.symbols import SymbolError, normalize
 from ..util import clean_json
 
 router = APIRouter(tags=["correlação"])
@@ -31,39 +30,6 @@ def panel(market: str, symbol: str):
     except SymbolError as exc:
         raise HTTPException(422, str(exc)) from exc
     try:
-        hist = registry.fetch(market, sym, "1h", store.HOURLY_DAYS)
+        return clean_json(service.panel_payload(market, sym))
     except ProviderError as exc:
         raise HTTPException(502, str(exc)) from exc
-
-    target_yahoo = yahoo_symbol(market, sym)[0]
-    snap = store.snap_ny16(hist.df)
-
-    base = store.load_closes()
-    idx = base.index.union(snap.index)
-    closes = base.reindex(idx)
-    closes[engine.TARGET] = snap.reindex(idx)
-
-    sectors = universe.own_sector_etfs(target_yahoo) if market == "acoes" else frozenset()
-    result = engine.build_panel(
-        closes,
-        universe.CANDIDATES,
-        universe.FIXED,
-        is_mechanical=lambda other: universe.is_mechanical(target_yahoo, other, sectors),
-        exclude={target_yahoo},
-    )
-    return clean_json(
-        {
-            "target": {
-                "symbol": sym,
-                "yahoo": target_yahoo,
-                "market": market,
-                "observations": int(len(snap)),
-                "first": snap.index[0].date() if len(snap) else None,
-                "last": snap.index[-1].date() if len(snap) else None,
-            },
-            "universe": store.universe_state(),
-            "refresh": store.status(),
-            "params": engine.params(),
-            **result,
-        }
-    )

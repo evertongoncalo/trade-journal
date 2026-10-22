@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config, db
 from .alerts import watcher
-from .routes import alerts, assets, correlation, journal, scanner
+from .routes import ai, alerts, assets, correlation, journal, scanner
 from .scanner import store as scanner_store
 
 
@@ -29,6 +29,7 @@ app.include_router(journal.router, prefix="/api")
 app.include_router(correlation.router, prefix="/api")
 app.include_router(scanner.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
 
 
 @app.get("/api/health")

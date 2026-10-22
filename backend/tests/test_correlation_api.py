@@ -76,7 +76,7 @@ def test_target_equal_to_a_reference_is_excluded(client, monkeypatch):
     for sym, s in closes.items():
         store.save_closes(sym, s)
     patch_target(monkeypatch, target)
-    monkeypatch.setattr("app.routes.correlation.yahoo_symbol", lambda m, s: ("^VIX", ""))
+    monkeypatch.setattr("app.correlation.service.yahoo_symbol", lambda m, s: ("^VIX", ""))
     discovered = client.get("/api/correlation/cripto/BTC").json()["discovered"]
     assert all(i["symbol"] != "^VIX" for g in discovered for i in g["items"])
 

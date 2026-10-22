@@ -28,6 +28,15 @@ def _path(env: str, default: str) -> Path:
 
 DB_PATH = _path("JOURNAL_DB_PATH", "data/journal.db")
 
+# Análise com IA via OpenRouter (https://openrouter.ai). A chave fica só no .env, nunca no git.
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip()
+OPENROUTER_API_URL = os.environ.get("OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions").strip()
+AI_MODEL = os.environ.get("AI_MODEL", "anthropic/claude-sonnet-5.5").strip()
+# O raciocínio do modelo é cobrado como saída: "low" mantém o custo baixo (vazio = padrão do modelo).
+AI_REASONING_EFFORT = os.environ.get("AI_REASONING_EFFORT", "low").strip().lower()
+AI_MAX_TOKENS = int(os.environ.get("AI_MAX_TOKENS", "6000"))
+AI_TIMEOUT_SECONDS = float(os.environ.get("AI_TIMEOUT_SECONDS", "120"))
+
 # Alertas de preço: a vigilância roda dentro do servidor (só vigia com o app ligado).
 ALERTS_WATCHER = os.environ.get("ALERTS_WATCHER", "1") != "0"
 ALERT_POLL_SECONDS = float(os.environ.get("ALERT_POLL_SECONDS", "60"))

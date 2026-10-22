@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import AiPanel from "../components/AiPanel";
 import {
   api,
   MARKET_LABEL,
+  type AiAnalysis,
   type AlertDraft,
   type Asset,
   type Draft,
@@ -31,7 +33,7 @@ export interface AssetRequest {
   nonce: number;
 }
 
-function draftFrom(a: Asset, setups: string[]): Draft {
+function draftFrom(a: Asset, setups: string[], ai: AiAnalysis | null): Draft {
   const long = a.snapshot.trend !== "baixa";
   const step = a.snapshot.atr14 ?? a.price * 0.02;
   return {
@@ -55,6 +57,15 @@ function draftFrom(a: Asset, setups: string[]): Draft {
         label: a.probability.label,
       },
       health: a.health,
+      // a análise com IA do momento vai junto com o registro, para o diário medir depois quem acertou
+      ai: ai && {
+        id: ai.id,
+        prompt_version: ai.prompt_version,
+        model: ai.model,
+        lenses: Object.fromEntries(
+          ai.lenses.filter((l) => l.resultado).map((l) => [l.lente, { inclinacao: l.resultado!.inclinacao, confianca: l.resultado!.confianca }]),
+        ),
+      },
     },
   };
 }
@@ -75,11 +86,13 @@ export default function AssetPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [setupNames, setSetupNames] = useState<string[]>([]);
+  const [ai, setAi] = useState<AiAnalysis | null>(null);
 
   const analyze = useCallback(async (m: Market, s: string, h: number) => {
     if (!s.trim()) return;
     setLoading(true);
     setError(null);
+    setAi(null);
     try {
       setData(await api.asset(m, s.trim(), h));
     } catch (err) {
@@ -162,15 +175,26 @@ export default function AssetPage({
       {data && (
         <AssetView
           data={data}
-          onRegister={() => onRegister(draftFrom(data, setupNames))}
+          onRegister={() => onRegister(draftFrom(data, setupNames, ai))}
           onAlert={() => onAlert({ market: data.market, symbol: data.symbol, price: roundPrice(data.price) })}
+          onAnalysis={setAi}
         />
       )}
     </div>
   );
 }
 
-function AssetView({ data, onRegister, onAlert }: { data: Asset; onRegister: () => void; onAlert: () => void }) {
+function AssetView({
+  data,
+  onRegister,
+  onAlert,
+  onAnalysis,
+}: {
+  data: Asset;
+  onRegister: () => void;
+  onAlert: () => void;
+  onAnalysis: (a: AiAnalysis | null) => void;
+}) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -202,6 +226,14 @@ function AssetView({ data, onRegister, onAlert }: { data: Asset; onRegister: () 
           <ProbabilityCard p={data.probability} />
         </div>
       </div>
+
+      <AiPanel
+        key={`ai:${data.market}:${data.symbol}`}
+        market={data.market}
+        symbol={data.symbol}
+        horizon={data.probability.horizon_days}
+        onAnalysis={onAnalysis}
+      />
 
       <CorrelationPanel key={`${data.market}:${data.symbol}`} market={data.market} symbol={data.symbol} />
     </div>

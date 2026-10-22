@@ -16,16 +16,17 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 2. **Ativo**: abrir um achado leva à ficha completa (gráfico, indicadores, inclinação probabilística, painel de correlação).
 3. **Diário**: registrar a decisão (entrei / não entrei / observando) com tese, invalidação e alvo; o app acompanha o resultado.
 
-## Status (v0.4)
+## Status (v0.5)
 
 | Pronto | Ainda não |
 |---|---|
-| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis, lista filtrável, falhas reportadas | Botão de IA (lentes) e memória/pós-mortem |
+| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis, lista filtrável, falhas reportadas | Memória da IA e pós-mortem |
 | Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Alertas por Telegram ou e-mail |
 | Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Revisão do acerto por bloco e por lente |
 | Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | Timeframe H4 nos setups |
 | Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | |
 | **Alertas de preço:** avulsos e níveis do plano do diário, detecção por máxima/mínima, notificação do Windows | |
+| **Análise com IA (OpenRouter):** lentes por mercado, prompt fixo versionado, saída em JSON, citações conferidas por código, sem veredito global | |
 
 ### Scanner
 
@@ -39,6 +40,27 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
   vantagem sobre entradas aleatórias**: eles existem para você editar e para o diário medir.
 - A primeira varredura real (22/10/2026) levou ~95 s e listou 172 achados em 171 ativos (29% do universo): setups largos listam
   muito. Aperte as condições ou use os filtros da lista.
+
+### Análise com IA (OpenRouter)
+
+O botão **Analisar com IA** fica na ficha do ativo e roda uma "lente" por tema, cada uma em uma chamada separada e vendo só os
+dados dela. Ações: macro, fundamentalista, indicadores, price action. Forex: macro e fundamentos, indicadores, price action. Cripto:
+referência (BTC, risco, dólar), indicadores, price action. **Não há veredito global**: as lentes podem divergir, e a tela mostra isso.
+
+- **A IA só interpreta.** Indicadores, níveis, correlações, macro e fundamentos são calculados por código e entregues num pacote
+  JSON; a IA não busca nada nem faz contas. Calendário econômico, inflação, bancos centrais e notícias **não** entram: aparecem como lacuna.
+- **Cada lente responde em JSON**: inclinação (para alta, para baixa, indistinta ou sem dados), confiança, resumo, evidências, o
+  que faltou e o que mudaria a conclusão. As evidências citam um campo do pacote e um valor: o app **confere cada citação** e marca
+  com ⚠ as que não existem ou não batem.
+- **Prompt fixo e versionado** (v1): a versão e uma impressão digital dos textos ficam gravadas em cada análise, e a tela mostra o pacote
+  enviado e os prompts. Mudar um texto exige criar a v2.
+- **Configuração**: crie uma chave em <https://openrouter.ai/keys>, ponha saldo em <https://openrouter.ai/credits> e preencha
+  `OPENROUTER_API_KEY` no `.env` (modelo em `AI_MODEL`, esforço de raciocínio em `AI_REASONING_EFFORT`, ver `.env.example`).
+  **Reinicie o app** depois de editar o `.env`. A conta da OpenRouter é separada de qualquer assinatura Claude.
+- **Custo**: vem da própria OpenRouter e aparece em cada análise. O padrão é `anthropic/claude-sonnet-5.5` com raciocínio `low`
+  (o raciocínio é cobrado como saída). Para comparar com um modelo mais barato, troque `AI_MODEL` para `anthropic/claude-haiku-5.5`.
+- **Privacidade**: só dados de mercado vão para a OpenRouter; nada do diário (teses, notas, decisões) é enviado.
+- O resumo das lentes vai junto quando você registra a decisão no diário.
 
 ### Alertas de preço
 
@@ -104,13 +126,14 @@ cd backend
 
 ```
 backend/app/
+  ai/           análise com IA: pacote de dados, prompts versionados, cliente da OpenRouter, conferência das citações
   alerts/       alertas de preço: regra de disparo, vigilância em segundo plano, notificação do Windows
   scanner/      universo, catálogo de condições, setups, varredura em segundo plano
   correlation/  universo de candidatos, alinhamento 16h NY, motor de correlação
   providers/    fontes de preço atrás de uma interface comum (Yahoo, Binance) + símbolos
   analysis/     indicadores (RSI/ATR de Wilder, MACD, Bollinger) e inclinação probabilística
   journal/      avaliação do plano de uma tese (alvo × invalidação × horizonte, em R)
-  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts)
+  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts, /api/ai)
 backend/scripts/ atualização das listas de ações
 frontend/src/   React + TypeScript + Tailwind, tema escuro
 docs/           especificação

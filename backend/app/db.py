@@ -112,6 +112,26 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts (status);
 CREATE INDEX IF NOT EXISTS idx_alerts_entry ON alerts (entry_id);
+
+-- Análises com IA: o pacote enviado e a resposta de cada lente ficam guardados (auditoria e futura memória).
+CREATE TABLE IF NOT EXISTS ai_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,              -- UTC
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    horizon_days INTEGER NOT NULL,
+    prompt_version TEXT NOT NULL,
+    prompt_fingerprint TEXT NOT NULL,
+    model TEXT NOT NULL,
+    effort TEXT,
+    package_json TEXT NOT NULL,            -- ativo, saúde dos dados, avisos e fatias enviadas
+    lenses_json TEXT NOT NULL,             -- resultado de cada lente (ou o erro)
+    cost_usd REAL,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    duration_ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_ai_asset ON ai_analyses (market, symbol, id);
 """
 
 _UPDATABLE = {

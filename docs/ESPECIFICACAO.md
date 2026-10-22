@@ -133,6 +133,35 @@ Implementação (v0.2):
   em 2026-10-06): ≈ US$ 0,04 com Sonnet 5.5; ≈ US$ 0,002 com Haiku 5.5. Raciocínio da IA conta como saída: usar esforço baixo/médio.
   Confirmar com medição real.
 
+Implementação (v0.5):
+- **Provedor: OpenRouter** (decisão do usuário), por HTTP direto com a biblioteca padrão, no formato de chat da OpenAI; a chave vem de
+  `OPENROUTER_API_KEY` no `.env`. O modelo é configurável (`AI_MODEL`, padrão `anthropic/claude-sonnet-5.5`, US$ 2/10 por milhão de
+  tokens; `anthropic/claude-haiku-5.5` custa US$ 0,10/0,50).
+- Lentes: ações = macro, fundamentalista, indicadores, price action; forex = macro e fundamentos, indicadores, price action;
+  cripto = referência (BTC, risco, dólar), indicadores, price action. Uma chamada por lente, em paralelo; cada lente recebe só as
+  suas fatias do pacote (isolamento comprovado por teste). Se uma lente falha, as outras seguem; só falha tudo se todas falharem.
+- Pacote montado por código: indicadores (valores, últimas 10 leituras de RSI e histograma, probabilidade condicional), price
+  action (topos e fundos, suporte e resistência em ATR, range de 52 semanas, 30 últimas barras), macro (dólar, juros, VIX,
+  índices, commodities e cripto, a partir do universo de correlação), correlação (referências fixas, descobertas estáveis,
+  parecer do código), fundamentos (Yahoo: múltiplos, margens, crescimento, próximo resultado; analistas separados como opinião de
+  terceiros). Ficam de fora e são declarados como lacuna: calendário econômico, inflação, taxas de outros bancos centrais e notícias.
+- Saída em JSON por esquema (`response_format: json_schema` com `provider.require_parameters`), validada de novo pelo app:
+  inclinação (para_alta, para_baixa, indistinta, sem_dados), confiança, resumo, evidências (campo, valor, leitura, aponta_para),
+  lacunas e o que mudaria a conclusão. Não existe campo de veredito, nota ou recomendação.
+- **Citações conferidas por código**: cada evidência cita um caminho do pacote e um valor; o app resolve o caminho e compara
+  (com tolerância de arredondamento e de % × fração). Citação que não existe ou não bate aparece com ⚠ na tela.
+- Prompts fixos e versionados (v1): texto-base + nota do mercado + instruções da lente; a versão e uma impressão digital (SHA-256) dos
+  textos e do esquema são gravadas em cada análise, e um teste trava o hash da v1 (editar um prompt publicado exige uma v2).
+- Custo real vem de `usage.cost` da OpenRouter e é gravado por análise. O raciocínio do Sonnet 5.5 é obrigatório e cobrado como
+  saída, por isso o padrão é esforço `low` (`AI_REASONING_EFFORT`); se a resposta for cortada pelo limite, o erro orienta o ajuste.
+- Erros tratados com mensagem própria: sem chave, chave recusada (401), sem saldo (402), limite (429, com novas tentativas), provedor
+  fora do ar (5xx, com novas tentativas), resposta truncada, recusa, JSON fora do formato.
+- Privacidade: só o pacote de dados de mercado é enviado; nada do diário (teses, notas, decisões) sai do computador.
+- O resumo das lentes (inclinação e confiança) vai no `snapshot.ai` do registro do diário.
+- Verificado até 2026-10-22 com um servidor local que imita a OpenRouter (caminho HTTP, retentativas, erro isolado por lente,
+  citações inventadas sendo marcadas) e com pacotes reais de NVDA, BTC e EURUSD. **Ainda não houve chamada a um modelo real**:
+  a primeira análise com a chave do usuário deve ser conferida (custo, tempo e qualidade das respostas).
+
 ## 8. Diário e medição de acerto
 
 Registro por ativo/decisão: decisão (entrei / não entrei / observando), tese, invalidação, alvo, horizonte,

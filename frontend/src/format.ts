@@ -26,6 +26,11 @@ export function fmtDateTime(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
 }
 
+export function fmtUsd(n: Maybe): string {
+  if (n == null) return "—";
+  return `US$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 4 })}`;
+}
+
 /** Data (UTC) de uma barra diária: o rótulo da barra cai em horários diferentes conforme a bolsa. */
 export function fmtDate(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "—";
