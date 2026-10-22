@@ -21,7 +21,7 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 | Pronto | Ainda não |
 |---|---|
 | **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis em **D1 ou H4**, lista filtrável, falhas reportadas | Alertas por e-mail |
-| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | |
+| Ficha do ativo: gráfico (widget do TradingView, abre sempre com o **Supertrend**), indicadores, saúde dos dados | |
 | Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | |
 | Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | |
 | Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | |
@@ -237,7 +237,9 @@ docs/           especificação
   (não oficial; serve ao MVP e está atrás de uma interface para ser trocado).
 - Ouro spot (`XAUUSD`) não existe no Yahoo: os cálculos usam o futuro `GC=F`, enquanto o gráfico do TradingView mostra o spot da OANDA.
   Os dois diferem um pouco.
-- O widget do TradingView é só exibição: o app não lê valores dele nem desenha níveis nele.
+- O widget do TradingView é só exibição: o app não lê valores dele nem desenha níveis nele. O gráfico abre sempre com o **Supertrend** do
+  TradingView (ATR 10, fator 3) por padrão; ele é só visual, os cálculos do app (blocos, probabilidade, scanner) não o usam. Para trocar ou
+  somar indicadores, edite `DEFAULT_STUDIES` em `frontend/src/components/TradingViewChart.tsx`.
 - Barras diárias de forex podem ficar em formação até ~17h de Nova York; o corte do scanner é o último 16:00 de Nova York.
 - O dado de 1 hora do Yahoo vai até ~730 dias; a avaliação do diário usa 1h quando possível e diário como reserva. O H4 de ações e
   forex usa 1 ano dele.

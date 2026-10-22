@@ -1,18 +1,24 @@
 import { useEffect, useRef } from "react";
 
+/** Indicadores que o gráfico já abre ligados. "STD;Supertrend" é o Supertrend do TradingView (ATR 10, fator 3). */
+const DEFAULT_STUDIES = ["STD;Supertrend"];
+
 /**
  * Widget "Advanced Chart" do TradingView (gratuito, hospedado por eles; o script monta o iframe).
- * Só exibição: o app não lê os valores do gráfico nem desenha níveis nele.
+ * Só exibição: o app não lê os valores do gráfico nem desenha níveis nele. Abre sempre com o Supertrend.
  */
 export default function TradingViewChart({
   symbol,
   height = 520,
   interval = "D",
+  studies = DEFAULT_STUDIES,
 }: {
   symbol: string;
   height?: number;
   /** "D" (diário) ou "240" (4 horas). */
   interval?: "D" | "240";
+  /** Indicadores carregados com o gráfico (padrão: Supertrend). */
+  studies?: string[];
 }) {
   const host = useRef<HTMLDivElement>(null);
 
@@ -40,13 +46,16 @@ export default function TradingViewChart({
       locale: "br",
       allow_symbol_change: false,
       calendar: false,
+      studies,
       support_host: "https://www.tradingview.com",
     });
     el.appendChild(script);
     return () => {
       el.innerHTML = "";
     };
-  }, [symbol, interval]);
+    // `studies` entra pelo conteúdo: um array novo a cada render não pode recarregar o gráfico
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, interval, studies.join("|")]);
 
   return (
     <div

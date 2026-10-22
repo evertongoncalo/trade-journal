@@ -322,6 +322,9 @@ Implementação (v0.4):
   Limites: só exibição (o código não lê os valores nem desenha níveis do usuário nele); atraso varia por mercado
   (não confirmado quais são tempo real no plano gratuito); termos de atribuição não confirmados; o preço do widget pode diferir um pouco da nossa fonte.
 - Gráficos próprios só para o painel de correlação.
+- O widget abre sempre com o **Supertrend** (`studies: ["STD;Supertrend"]`, o do próprio TradingView, ATR 10 e fator 3), por pedido do usuário.
+  O identificador não está na documentação do widget: foi confirmado testando (a legenda "Supertrend 10 3" e as faixas aparecem). É só
+  visual: o app não lê o valor do indicador, então ele não entra nos blocos de código, na probabilidade, no scanner nem na revisão.
 - Mapear o símbolo de cada ativo com o prefixo de bolsa correto (o scanner antigo fixava `NASDAQ:`).
 
 ## 12. Dados e fontes
