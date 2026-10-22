@@ -9,14 +9,23 @@ se "setup + decisão humana" é viável. Nada é automático: o app nunca opera.
 
 Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 
-## Status (v0.1)
+## Status (v0.2)
 
 | Pronto | Ainda não |
 |---|---|
-| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Painel de correlação |
-| Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Funil / radar diário com setups |
-| Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | Botão de IA (lentes) e memória/pós-mortem |
-| Acerto da tese por decisão (entrei / não entrei / observando) | Alertas de preço |
+| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Funil / radar diário com setups |
+| Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Botão de IA (lentes) e memória/pós-mortem |
+| Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | Alertas de preço |
+| Acerto da tese por decisão (entrei / não entrei / observando) | Revisão do acerto por bloco e por lente |
+| **Painel de correlação (só código):** S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, estabilidade, parecer e 3 gráficos | |
+
+### Painel de correlação
+
+Na primeira vez, clique em **Atualizar universo** (30 s a 2 min): ele baixa o universo de candidatos (índices, juros, VIX,
+commodities, cripto, forex, ETFs de setor) e guarda no SQLite local. Cada ativo é amostrado a partir de dados de 1 hora
+na última barra que fecha às 16h de Nova York, para que forex, cripto e bolsas sejam comparados no mesmo instante.
+Relações mecânicas (par de forex com moeda em comum, DXY × par com USD, ação × ETF do próprio setor) ficam marcadas e
+escondidas por padrão. A janela é de ~2 anos (limite do dado de 1 hora do Yahoo).
 
 ## Como rodar (Windows)
 

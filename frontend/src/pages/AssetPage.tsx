@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { api, MARKET_LABEL, type Asset, type Draft, type Market, type Probability, type ProbLabel } from "../api";
+import CorrelationPanel from "../components/CorrelationPanel";
 import TradingViewChart from "../components/TradingViewChart";
 import { Badge, Card, btnGhost, btnPrimary, inputCls, Field } from "../components/ui";
 import { fmtDate, fmtNum, fmtPct, fmtPrice, roundPrice } from "../format";
@@ -137,6 +138,8 @@ function AssetView({ data, onRegister }: { data: Asset; onRegister: () => void }
           <ProbabilityCard p={data.probability} />
         </div>
       </div>
+
+      <CorrelationPanel key={`${data.market}:${data.symbol}`} market={data.market} symbol={data.symbol} />
     </div>
   );
 }

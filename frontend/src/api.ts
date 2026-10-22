@@ -150,6 +150,82 @@ export interface RefreshResult {
   erros: { symbol: string; erro: string }[];
 }
 
+export type PairStatus = "estável" | "sem relação estável" | "mecânica" | "sem dados";
+
+export interface PairRow {
+  symbol: string;
+  label: string;
+  mechanical: boolean;
+  status: PairStatus;
+  n: number;
+  corr_full?: number | null;
+  corr_250?: number | null;
+  corr_60?: number | null;
+  corr_20?: number | null;
+  roll_min?: number | null;
+  roll_max?: number | null;
+  stability?: number | null;
+  weekly?: number | null;
+  beta?: number | null;
+  move20_target?: number | null;
+  move20_other?: number | null;
+  other_unit?: "%" | "pts";
+  agree?: "concordam" | "divergem" | "indefinido";
+  z20?: number | null;
+}
+
+export interface Parecer {
+  lines: string[];
+  refs_used: string[];
+  r2: number | null;
+  r2_first: number | null;
+  expected20_pp: number | null;
+  actual20_pp: number | null;
+  gap20_pp: number | null;
+  z20: number | null;
+}
+
+export interface CorrCharts {
+  rebased: { dates: string[]; series: Record<string, number[]> } | null;
+  rolling: { dates: string[]; series: Record<string, (number | null)[]> } | null;
+  scatter: {
+    ref: string;
+    points: [number, number][];
+    recent: [number, number][];
+    slope: number;
+    intercept: number;
+  } | null;
+}
+
+export interface UniverseState {
+  state: "vazio" | "ok" | "desatualizado";
+  symbols: number;
+  expected: number;
+  updated_at: string | null;
+  missing: string[];
+}
+
+export interface RefreshStatus {
+  state: "idle" | "running" | "done" | "error";
+  done: number;
+  total: number;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  missing: string[];
+}
+
+export interface CorrelationData {
+  target: { symbol: string; yahoo: string; market: Market; observations: number; first: string | null; last: string | null };
+  universe: UniverseState;
+  refresh: RefreshStatus;
+  params: { roll_days: number; recent_days: number; stable_share: number; min_abs_corr: number; min_obs: number; alignment: string };
+  fixed: PairRow[];
+  discovered: { name: string; items: PairRow[] }[];
+  parecer: Parecer | null;
+  charts: CorrCharts;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
   if (!res.ok) {
@@ -176,4 +252,9 @@ export const api = {
   earlyExit: (id: number, price: number, reason: string) =>
     request<Entry>(`/api/journal/${id}/early-exit`, { method: "POST", body: JSON.stringify({ price, reason }) }),
   remove: (id: number) => request<void>(`/api/journal/${id}`, { method: "DELETE" }),
+  correlation: (market: Market, symbol: string) =>
+    request<CorrelationData>(`/api/correlation/${market}/${encodeURIComponent(symbol)}`),
+  correlationStatus: () => request<{ refresh: RefreshStatus; universe: UniverseState }>("/api/correlation/status"),
+  correlationRefresh: () =>
+    request<{ started: boolean; refresh: RefreshStatus }>("/api/correlation/refresh", { method: "POST" }),
 };

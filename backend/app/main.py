@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db
-from .routes import assets, journal
+from .routes import assets, correlation, journal
 
 
 @asynccontextmanager
@@ -19,6 +19,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Trade Journal", lifespan=lifespan)
 app.include_router(assets.router, prefix="/api")
 app.include_router(journal.router, prefix="/api")
+app.include_router(correlation.router, prefix="/api")
 
 
 @app.get("/api/health")

@@ -94,6 +94,16 @@ O modelo inclui a tendência média do ativo no período.
 
 Saída: gráficos próprios (linhas rebaseadas em 100, correlação móvel, dispersão com a reta) + texto gerado por regras.
 
+Implementação (v0.2):
+- O universo (43 instrumentos do Yahoo) é baixado sob demanda pelo botão "Atualizar universo" (~30 s a 2 min) e guardado em
+  SQLite; passa a "desatualizado" depois de 20 h.
+- Fixadas: S&P 500 e DXY. Se a relação com uma fixa for mecânica (ex.: EURUSD × DXY), ela sai do parecer.
+- Ação × ETF do próprio setor é detectada pelo setor/indústria do Yahoo (`info`); se a consulta falhar, o ETF aparece normalmente.
+- O parecer não compara "esperado × real" quando os referenciais explicam menos de 5% do ativo (R²).
+- "Descolamento de 20 dias" só é mostrado para relações estáveis: |z| < 1 normal; 1–2 divergência relevante; > 2 forte.
+- Validado contra uma varredura independente feita antes: NVDA × S&P +0,70 e × DXY +0,04; ouro × DXY −0,42 (estável em 99%
+  das janelas); EURUSD × DXY −0,98 (mecânica); parecer do NVDA idêntico (−3,2 pp, z = −0,60).
+
 ## 7. Análise com IA (botão separado)
 
 - **Lentes por mercado**, cada uma em chamada separada recebendo **só a sua fatia dos dados**:

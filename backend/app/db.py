@@ -31,6 +31,19 @@ CREATE TABLE IF NOT EXISTS entries (
     early_exit_r REAL,
     last_evaluated_at TEXT
 );
+
+-- Fechamentos diários de cada instrumento no instante 16:00 de Nova York (painel de correlação).
+CREATE TABLE IF NOT EXISTS closes_ny16 (
+    symbol TEXT NOT NULL,
+    d TEXT NOT NULL,                       -- data (NY), AAAA-MM-DD
+    close REAL NOT NULL,
+    PRIMARY KEY (symbol, d)
+);
+CREATE TABLE IF NOT EXISTS closes_meta (
+    symbol TEXT PRIMARY KEY,
+    updated_at TEXT NOT NULL,              -- UTC, ISO 8601
+    rows INTEGER NOT NULL
+);
 """
 
 _UPDATABLE = {
