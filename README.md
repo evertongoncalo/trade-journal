@@ -16,17 +16,18 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 2. **Ativo**: abrir um achado leva à ficha completa (gráfico, indicadores, inclinação probabilística, painel de correlação).
 3. **Diário**: registrar a decisão (entrei / não entrei / observando) com tese, invalidação e alvo; o app acompanha o resultado.
 
-## Status (v0.5)
+## Status (v0.6)
 
 | Pronto | Ainda não |
 |---|---|
 | **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis, lista filtrável, falhas reportadas | Memória da IA e pós-mortem |
 | Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Alertas por Telegram ou e-mail |
-| Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Revisão do acerto por bloco e por lente |
-| Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | Timeframe H4 nos setups |
+| Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Timeframe H4 nos setups |
+| Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | |
 | Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | |
 | **Alertas de preço:** avulsos e níveis do plano do diário, detecção por máxima/mínima, notificação do Windows | |
 | **Análise com IA (OpenRouter):** lentes por mercado, prompt fixo versionado, saída em JSON, citações conferidas por código, sem veredito global | |
+| **Revisão do acerto:** por decisão, mercado, setup, bloco de código, lente de IA e respostas dos alertas, sempre com n e intervalo | |
 
 ### Scanner
 
@@ -75,6 +76,26 @@ referência (BTC, risco, dólar), indicadores, price action. **Não há veredito
 - **Só vigia com o app aberto** (o servidor). Ao ligar, confere o que aconteceu enquanto esteve desligado.
 - **O atraso do alerta é o atraso do dado.** Medido em 22/10/2026: cripto (Binance) e ações dos EUA (Yahoo) ~1 min; forex 1 a 2 min;
   ouro (futuro), DXY e índices europeus 10 a 15 min. Variáveis: `ALERT_POLL_SECONDS` (padrão 60), `ALERTS_WATCHER=0` para desligar.
+
+### Revisão do acerto
+
+Aba **Revisão**: mede o que o diário e os alertas já registraram. **Acerto da tese** = alvo ÷ (alvo + invalidada); expiradas e
+abertas ficam fora da taxa, mas aparecem. Toda taxa mostra o n e o intervalo de 95% (a barra azul); amostra com menos de 10
+resolvidas aparece esmaecida e abaixo de 30 vem com aviso. Não há score nem veredito.
+
+- **Por tipo de decisão:** a taxa da tese em cada uma (entrei, não entrei, observando) e a "decisão certa" (entrar e a tese bater o
+  alvo, ou ficar de fora e ela ser invalidada). Compara as teses em que você entrou com as que deixou de fora e mostra o que a
+  tese fez depois das saídas antecipadas.
+- **Por mercado** e **por setup.**
+- **Por bloco de código** (probabilidade, tendência, MACD, price action, correlação com S&P 500 e com DXY) e **por lente de IA:**
+  a pergunta é se a tese bateu o alvo mais vezes quando o bloco **concordava** com ela do que quando **discordava**. Se o bloco não
+  soubesse nada, as duas taxas seriam iguais; a diferença vem com intervalo e só é chamada de "distinguível" com ao menos 10
+  resolvidas em cada lado. As regras de leitura de cada bloco (`blocos-v1`) aparecem na tela.
+- **Respostas dos alertas:** quantos disparos, o que você respondeu e, nos alertas de entrada, o que a tese fez depois.
+- Registros anteriores a esta versão não guardaram price action nem correlação (ficam fora desses blocos). O botão **Reavaliar
+  teses abertas** atualiza os desfechos antes de olhar a revisão.
+- **Cuidado com a leitura:** são dezenas de comparações, então algumas vão parecer distinguíveis só por acaso; só vale o que se
+  repete em registros novos. Boa decisão com resultado ruim existe, e o quadro não separa uma da outra.
 
 ### Painel de correlação
 
@@ -133,7 +154,8 @@ backend/app/
   providers/    fontes de preço atrás de uma interface comum (Yahoo, Binance) + símbolos
   analysis/     indicadores (RSI/ATR de Wilder, MACD, Bollinger) e inclinação probabilística
   journal/      avaliação do plano de uma tese (alvo × invalidação × horizonte, em R)
-  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts, /api/ai)
+  review/       revisão do acerto: regras de leitura dos blocos e estatística por grupo
+  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts, /api/ai, /api/review)
 backend/scripts/ atualização das listas de ações
 frontend/src/   React + TypeScript + Tailwind, tema escuro
 docs/           especificação

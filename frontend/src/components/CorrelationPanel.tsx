@@ -30,7 +30,16 @@ function moveText(r: PairRow): string {
   return `${fmtNum(r.move20_target, 1)}% × ${fmtNum(r.move20_other, 1)}${r.other_unit === "pts" ? " pts" : "%"}`;
 }
 
-export default function CorrelationPanel({ market, symbol }: { market: Market; symbol: string }) {
+export default function CorrelationPanel({
+  market,
+  symbol,
+  onData,
+}: {
+  market: Market;
+  symbol: string;
+  /** Avisa a ficha do que foi calculado, para o registro do diário guardar as leituras das referências fixas. */
+  onData?: (d: CorrelationData | null) => void;
+}) {
   const [data, setData] = useState<CorrelationData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,12 +53,14 @@ export default function CorrelationPanel({ market, symbol }: { market: Market; s
       const d = await api.correlation(market, symbol);
       setData(d);
       setRefresh(d.refresh);
+      onData?.(d);
     } catch (err) {
+      onData?.(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [market, symbol]);
+  }, [market, symbol, onData]);
 
   useEffect(() => {
     void load();

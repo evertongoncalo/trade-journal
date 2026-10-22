@@ -74,6 +74,14 @@ export interface Asset {
   health: { daily: Health; intraday: Health | null };
   snapshot: Snapshot;
   probability: Probability;
+  /** Resumo da estrutura de preço; vai no snapshot do diário. null se o histórico não permitiu. */
+  price_action: {
+    estrutura: string;
+    variacao_pct: Record<string, number | null>;
+    posicao_no_range_52s: number | null;
+    dist_maxima_52s_pct: number | null;
+    dist_minima_52s_pct: number | null;
+  } | null;
 }
 
 export interface Entry {
@@ -438,6 +446,82 @@ export interface AlertDraft {
   price: number;
 }
 
+/** Um grupo de registros: contagem de desfechos e acerto da tese (alvo / (alvo + invalidada)) com Wilson. */
+export interface ReviewCell {
+  registros: number;
+  alvo: number;
+  invalidada: number;
+  expirada: number;
+  aberta: number;
+  fechadas: number;
+  taxa_acerto: number | null;
+  ic95: [number, number] | null;
+  amostra: "insuficiente" | "pequena" | "ok";
+  ids: number[];
+}
+
+export interface ReviewRate {
+  acertos: number;
+  fechadas: number;
+  taxa: number | null;
+  ic95: [number, number] | null;
+  amostra: ReviewCell["amostra"];
+}
+
+export interface ReviewDiff {
+  pp: number | null;
+  ic95_pp: [number, number] | null;
+  leitura: "a_maior" | "b_maior" | "indistinta" | "sem dados";
+}
+
+export type ReviewGroup = ReviewCell & { chave: string };
+
+/** Registros separados pelo lado que o bloco (ou a lente) apontava em relação à direção da tese. */
+export interface ReviewConcordance {
+  a_favor: ReviewCell;
+  contra: ReviewCell;
+  sem_inclinacao: ReviewCell;
+  sem_registro: number;
+  diferenca: ReviewDiff;
+}
+
+export interface ReviewAlertKind {
+  tipo: AlertKind;
+  criados: number;
+  disparados: number;
+  entrei: number;
+  ignorei: number;
+  observando: number;
+  sem_resposta: number;
+}
+
+export interface Review {
+  regras_versao: string;
+  amostra: ReviewCell & { ativos_distintos: number; primeiro: string | null; ultimo: string | null };
+  por_decisao: {
+    linhas: (ReviewGroup & { decisao_certa: ReviewRate })[];
+    entrei_vs_fora: { entrei: ReviewCell; fora: ReviewCell; diferenca: ReviewDiff };
+    saida_antecipada: { registros: number; depois: ReviewCell };
+  };
+  por_mercado: ReviewGroup[];
+  por_setup: ReviewGroup[];
+  por_bloco: (ReviewConcordance & { bloco: string; titulo: string; regra: string })[];
+  por_lente: {
+    registros_com_ia: number;
+    versoes: { prompt_version: string | null; model: string | null; registros: number }[];
+    lentes: (ReviewConcordance & { lente: string })[];
+  };
+  alertas: {
+    criados: number;
+    disparados: number;
+    sem_resposta: number;
+    cancelados: number;
+    por_tipo: ReviewAlertKind[];
+    entrada_por_resposta: ReviewGroup[];
+  };
+  avisos: string[];
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
   if (!res.ok) {
@@ -459,6 +543,7 @@ export const api = {
     request<Asset>(`/api/asset/${market}/${encodeURIComponent(symbol)}?horizon=${horizon}`),
   entries: () => request<Entry[]>("/api/journal"),
   stats: () => request<Stats>("/api/journal/stats"),
+  review: () => request<Review>("/api/review"),
   createEntry: (body: NewEntry) =>
     request<Entry & { alerts?: { id: number; kind: AlertKind; price: number; direction: AlertDirection }[] }>(
       "/api/journal",

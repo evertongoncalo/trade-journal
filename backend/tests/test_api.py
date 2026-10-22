@@ -56,6 +56,9 @@ def test_asset_endpoint(client):
     assert 0 <= body["snapshot"]["rsi14"] <= 100
     assert body["probability"]["label"] in {"alta", "baixa", "indistinta", "sem dados"}
     assert body["health"]["daily"]["source"] == "fake"
+    pa = body["price_action"]  # vai no snapshot do diário, para a revisão medir o bloco
+    assert set(pa) == {"estrutura", "variacao_pct", "posicao_no_range_52s", "dist_maxima_52s_pct", "dist_minima_52s_pct"}
+    assert pa["estrutura"] in {"topos e fundos ascendentes", "topos e fundos descendentes", "indefinida"} or pa["estrutura"].startswith("misto")
 
 
 def test_asset_validation_errors(client):

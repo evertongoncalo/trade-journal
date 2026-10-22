@@ -6,6 +6,7 @@ import {
   type AiAnalysis,
   type AlertDraft,
   type Asset,
+  type CorrelationData,
   type Draft,
   type Market,
   type Probability,
@@ -33,7 +34,25 @@ export interface AssetRequest {
   nonce: number;
 }
 
-function draftFrom(a: Asset, setups: string[], ai: AiAnalysis | null): Draft {
+/** Leitura das referências fixas (S&P 500, DXY) para o snapshot: a revisão deriva a inclinação desse bloco dela. */
+function correlationSnapshot(c: CorrelationData | null) {
+  if (!c) return undefined;
+  return Object.fromEntries(
+    c.fixed.map((r) => [
+      r.symbol,
+      {
+        label: r.label,
+        status: r.status,
+        corr_full: r.corr_full ?? null,
+        stability: r.stability ?? null,
+        move20_other: r.move20_other ?? null,
+        other_unit: r.other_unit ?? null,
+      },
+    ]),
+  );
+}
+
+function draftFrom(a: Asset, setups: string[], ai: AiAnalysis | null, corr: CorrelationData | null): Draft {
   const long = a.snapshot.trend !== "baixa";
   const step = a.snapshot.atr14 ?? a.price * 0.02;
   return {
@@ -57,6 +76,8 @@ function draftFrom(a: Asset, setups: string[], ai: AiAnalysis | null): Draft {
         label: a.probability.label,
       },
       health: a.health,
+      price_action: a.price_action ?? undefined,
+      correlation: correlationSnapshot(corr),
       // a análise com IA do momento vai junto com o registro, para o diário medir depois quem acertou
       ai: ai && {
         id: ai.id,
@@ -87,12 +108,14 @@ export default function AssetPage({
   const [error, setError] = useState<string | null>(null);
   const [setupNames, setSetupNames] = useState<string[]>([]);
   const [ai, setAi] = useState<AiAnalysis | null>(null);
+  const [corr, setCorr] = useState<CorrelationData | null>(null);
 
   const analyze = useCallback(async (m: Market, s: string, h: number) => {
     if (!s.trim()) return;
     setLoading(true);
     setError(null);
     setAi(null);
+    setCorr(null);
     try {
       setData(await api.asset(m, s.trim(), h));
     } catch (err) {
@@ -175,9 +198,10 @@ export default function AssetPage({
       {data && (
         <AssetView
           data={data}
-          onRegister={() => onRegister(draftFrom(data, setupNames, ai))}
+          onRegister={() => onRegister(draftFrom(data, setupNames, ai, corr))}
           onAlert={() => onAlert({ market: data.market, symbol: data.symbol, price: roundPrice(data.price) })}
           onAnalysis={setAi}
+          onCorrelation={setCorr}
         />
       )}
     </div>
@@ -189,11 +213,13 @@ function AssetView({
   onRegister,
   onAlert,
   onAnalysis,
+  onCorrelation,
 }: {
   data: Asset;
   onRegister: () => void;
   onAlert: () => void;
   onAnalysis: (a: AiAnalysis | null) => void;
+  onCorrelation: (c: CorrelationData | null) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -235,7 +261,12 @@ function AssetView({
         onAnalysis={onAnalysis}
       />
 
-      <CorrelationPanel key={`${data.market}:${data.symbol}`} market={data.market} symbol={data.symbol} />
+      <CorrelationPanel
+        key={`${data.market}:${data.symbol}`}
+        market={data.market}
+        symbol={data.symbol}
+        onData={onCorrelation}
+      />
     </div>
   );
 }

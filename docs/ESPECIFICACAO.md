@@ -175,6 +175,28 @@ invalidação primeiro = erro; expirou = neutro. Medido em R (múltiplos do risc
 - **Revisão**: acerto por mercado; por bloco de código e por lente de IA (quando disse X, quanto acertou?);
   quando o usuário discordou de um bloco, quem estava certo; saída antecipada vs manter.
 
+Implementação (v0.6): aba **Revisão** (`GET /api/review`), tudo calculado por código a partir do diário e dos alertas.
+- **Métrica**: acerto da tese = alvo ÷ (alvo + invalidada); expiradas e abertas ficam fora da taxa, mas aparecem. Toda taxa sai com o n e
+  o intervalo de Wilson; o rótulo de amostra é "insuficiente" (< 10 resolvidas), "pequena" (< 30) ou "ok". Não há score nem veredito.
+- **Por tipo de decisão**: entrei / não entrei / observando, com a taxa de acerto da tese e a "decisão certa" (entrar e a tese bater o
+  alvo; ficar de fora e a tese ser invalidada). Compara os que entrou com os que deixou de fora (diferença com intervalo de Newcombe) e
+  conta, nas saídas antecipadas, o que a tese fez depois. Boa decisão com resultado ruim existe e o quadro não separa as duas coisas.
+- **Por mercado** e **por setup** (os nomes gravados no registro; um registro com dois setups conta nos dois).
+- **Por bloco de código** (regras `blocos-v1`, lidas na revisão a partir dos valores brutos do snapshot, não de rótulos congelados):
+  probabilidade (rótulo da ficha), tendência (preço × MM20 × MM50), MACD (sinal do histograma), price action (estrutura de topos e
+  fundos) e correlação com S&P 500 e com DXY (só se a relação é "estável": sinal da correlação × movimento de 20 dias da referência).
+  RSI não aponta lado sozinho (a leitura dele está no estado da probabilidade). Relação mecânica não se aplica.
+- **Por lente de IA**: a inclinação de cada lente em `snapshot.ai`, mais as versões de prompt e modelo misturadas na amostra.
+- **A pergunta de blocos e lentes** é "a tese bateu o alvo mais vezes quando o bloco concordava com ela do que quando discordava?": se o
+  bloco não soubesse nada, as duas taxas seriam iguais. A diferença vem com intervalo; só vira "distinguível" com ≥ 10 resolvidas em cada
+  lado e o intervalo fora do zero. Registros sem o bloco (anteriores à v0.6, ou que não se aplica) ficam fora e são contados.
+- **Alertas**: criados, disparados e respostas por tipo; só o alerta de **entrada** tem desfecho a medir (o que a tese fez depois da
+  resposta). Alvo e invalidação disparam quando a tese termina, então medir seria circular; avulsos não têm plano.
+- O snapshot passou a guardar `price_action` (resumo compacto) e `correlation` (leitura das duas referências fixas).
+- Limites: dezenas de comparações com 95% geram falsos "distinguíveis" por acaso (a tela avisa); o desfecho é medido desde o registro,
+  sem exigir toque na entrada; registros do mesmo ativo em datas próximas não são independentes. Verificado com dados sintéticos e
+  conferido contra uma contagem independente em SQLite; com dados reais só dá para ler depois de dezenas de teses resolvidas.
+
 ## 9. Memória da IA (fase posterior; a gravação começa no dia 1)
 
 A IA não aprende sozinha; o app lembra e devolve contexto:
@@ -301,7 +323,7 @@ reais são mais largos — não tratar como evidência. Consequência para o des
 1. Ficha do ativo (iframe + dados + indicadores + painel de correlação + viés por bloco) e diário com acompanhamento automático de resultado.
 2. Botão de IA com as lentes.
 3. Radar/funil diário com setups definidos pelo usuário.
-4. Painel de revisão (acerto por bloco/lente) e alertas de preço.
+4. Painel de revisão (acerto por bloco/lente) e alertas de preço. *(feito: v0.4 alertas, v0.6 revisão)*
 5. Memória: pós-mortem, recuperação e alertas estatísticos (depende de casos fechados).
 
 ## 17. Em aberto
