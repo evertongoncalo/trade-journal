@@ -16,18 +16,19 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 2. **Ativo**: abrir um achado leva à ficha completa (gráfico, indicadores, inclinação probabilística, painel de correlação).
 3. **Diário**: registrar a decisão (entrei / não entrei / observando) com tese, invalidação e alvo; o app acompanha o resultado.
 
-## Status (v0.7)
+## Status (v0.8)
 
 | Pronto | Ainda não |
 |---|---|
-| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis em **D1 ou H4**, lista filtrável, falhas reportadas | Memória da IA e pós-mortem |
-| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Alertas por Telegram ou e-mail |
+| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis em **D1 ou H4**, lista filtrável, falhas reportadas | Alertas por Telegram ou e-mail |
+| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | |
 | Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | |
 | Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | |
 | Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | |
 | **Alertas de preço:** avulsos e níveis do plano do diário, detecção por máxima/mínima, notificação do Windows | |
 | **Análise com IA (OpenRouter):** lentes por mercado, prompt fixo versionado, saída em JSON, citações conferidas por código, sem veredito global | |
 | **Revisão do acerto:** por decisão, mercado, setup, bloco de código, lente de IA e respostas dos alertas, sempre com n e intervalo | |
+| **Memória da IA:** pós-mortem com causa em lista fixa, casos parecidos (na ficha e, opcionalmente, na análise com IA) e alertas estatísticos só por código | |
 
 ### Scanner
 
@@ -73,8 +74,40 @@ referência (BTC, risco, dólar), indicadores, price action. **Não há veredito
   **Reinicie o app** depois de editar o `.env`. A conta da OpenRouter é separada de qualquer assinatura Claude.
 - **Custo**: vem da própria OpenRouter e aparece em cada análise. O padrão é `anthropic/claude-sonnet-5.5` com raciocínio `low`
   (o raciocínio é cobrado como saída). Para comparar com um modelo mais barato, troque `AI_MODEL` para `anthropic/claude-haiku-5.5`.
-- **Privacidade**: só dados de mercado vão para a OpenRouter; nada do diário (teses, notas, decisões) é enviado.
+- **Privacidade**: por padrão só dados de mercado vão para a OpenRouter; nada do diário (teses, notas, decisões) é enviado. Há duas
+  exceções, ambas opcionais e avisadas na tela: o **pós-mortem** (envia o caso, a tese e o motivo da saída que você escreveu) e a
+  **memória na análise** (casos parecidos estruturados, sem texto livre). Ver "Memória da IA".
 - O resumo das lentes vai junto quando você registra a decisão no diário.
+
+### Memória da IA
+
+A IA não aprende sozinha: o app lembra por ela, em três partes. A aba **Memória** reúne as duas primeiras e a ficha do ativo mostra a terceira.
+
+- **Pós-mortem** (uma chamada paga por caso, só quando você pede; nunca automática): vale para tese **invalidada** e para
+  **saída antecipada**. O pacote separa o que **já era visível no registro** (indicadores, probabilidade, price action,
+  correlação, as lentes de IA da época, o quanto o movimento já estava esticado) do que **aconteceu depois** (o caminho do preço em
+  múltiplos de R, o que veio depois de uma saída antecipada e a variação de dólar, juros, VIX e índices no período, tudo por código;
+  só entram fechamentos das 16h de Nova York que já tinham acontecido, para não olhar o futuro). A IA escolhe **uma causa de uma
+  lista fixa** (`causas-v1`): evento macro, referência divergiu, indicador deu ruído, invalidação ignorada, entrada tardia ou
+  **sem causa identificável** (resposta normal e frequente, preferida a uma história plausível). Responde em JSON, marca o que era
+  visível × o que só ficou claro depois e pode levantar até duas **hipóteses**, sempre rotuladas assim.
+- **O código confere a resposta** e mostra os avisos ao lado dela: citação que não bate com o pacote, causa que não vale para a
+  decisão (invalidação ignorada e entrada tardia só para quem entrou), "invalidação ignorada" sem saída registrada depois do toque,
+  "evento macro" sem nenhuma referência se mover de forma notável, "entrada tardia" sem o preço ter andado a favor antes, respostas
+  incoerentes. O pacote enviado fica gravado e pode ser aberto. Prompt e esquema são versionados (`pm-v1`, travados por hash).
+- **Casos parecidos**: na ficha do ativo, o cartão "Memória do diário" lista as teses já resolvidas de estado parecido (mesmo ativo,
+  mesmo mercado, setup em comum e cada bloco de código que aponta o mesmo lado), com **os motivos da semelhança** e o desfecho. O
+  corte é de 3 pontos; com poucos registros, poucos casos passam.
+- **Alertas estatísticos (só código)**: só aparecem diferenças **distinguíveis do acaso** entre partes do diário (setup, mercado,
+  entrou × ficou de fora, saída antecipada, blocos e lentes): ao menos 10 teses resolvidas em cada lado e intervalo de 95% da
+  diferença fora do zero, sempre com o n. A tela mostra quantas comparações foram testadas e quantos "distinguíveis" o acaso sozinho
+  produziria (≈ 5%): é indício para olhar os casos, nunca regra. A IA só entra com hipóteses, que nunca viram alerta.
+- **Na análise com IA** há a opção **"Usar a memória do diário"** (desligada por padrão): usa o prompt **v2** (a v1 mais uma regra
+  sobre a memória; a v1 segue intacta) e entrega a cada lente os casos parecidos e as estatísticas. Cada lente vê, nos casos, só o que
+  ela mesma disse na época. O que sai do computador é estruturado e sem texto livre: mercado, ativo, direção, mês, desfecho, prazo,
+  motivos da semelhança, a resposta passada da própria lente e a causa do pós-mortem. **Não vão** tese, notas, motivo de saída,
+  decisão nem preços. O pós-mortem, por outro lado, **envia a tese e o motivo da saída que você escreveu**, e a tela avisa antes.
+- Custo: cada pós-mortem é uma chamada (o custo real fica gravado e o médio aparece na tela). Ainda não foi medido com um modelo real.
 
 ### Alertas de preço
 
@@ -168,7 +201,8 @@ backend/app/
   analysis/     indicadores (RSI/ATR de Wilder, MACD, Bollinger) e inclinação probabilística
   journal/      avaliação do plano de uma tese (alvo × invalidação × horizonte, em R)
   review/       revisão do acerto: regras de leitura dos blocos e estatística por grupo
-  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts, /api/ai, /api/review)
+  memory/       memória da IA: causas fixas, caminho do preço, pós-mortem, casos parecidos, alertas estatísticos
+  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts, /api/ai, /api/review, /api/memory)
 backend/scripts/ atualização das listas de ações
 frontend/src/   React + TypeScript + Tailwind, tema escuro
 docs/           especificação

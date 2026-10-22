@@ -221,7 +221,7 @@ Implementação (v0.6): aba **Revisão** (`GET /api/review`), tudo calculado por
   sem exigir toque na entrada; registros do mesmo ativo em datas próximas não são independentes. Verificado com dados sintéticos e
   conferido contra uma contagem independente em SQLite; com dados reais só dá para ler depois de dezenas de teses resolvidas.
 
-## 9. Memória da IA (fase posterior; a gravação começa no dia 1)
+## 9. Memória da IA (a gravação começou no dia 1; implementada na v0.8)
 
 A IA não aprende sozinha; o app lembra e devolve contexto:
 1. Registro de tudo (seção 8).
@@ -233,6 +233,44 @@ A IA não aprende sozinha; o app lembra e devolve contexto:
 
 Limites conhecidos: viés retrospectivo e histórias plausíveis (daí a lista fixa e o "sem causa"); poucos casos = indício, não regra
 (pensar em dezenas); o prompt só muda quando o usuário revisar e subir nova versão.
+
+Implementação (v0.8): aba **Memória**, cartão "Memória do diário" na ficha, pós-mortem no Diário e opção de memória na análise.
+- **Pós-mortem** (`memory/postmortem.py`): uma chamada por caso, só sob demanda e confirmada na tela (custa dinheiro). Elegível: tese
+  `invalidada` e/ou saída antecipada registrada (qualquer decisão: uma tese que falhou num "não entrei" também ensina). O pacote tem
+  `caso` (plano, desfecho, tese e motivo de saída do operador), `visivel_na_epoca` (snapshot do registro, leitura dos blocos de
+  código em relação à direção da tese, lentes de IA da época, "esticado": variação de 5 e 20 dias a favor, distância da MM20 em ATR, RSI)
+  e `depois` (caminho do preço e referências). Contra o viés retrospectivo, os dois blocos são separados e o prompt exige que "visível na
+  época" só use o primeiro.
+- **Caminho do preço** (`memory/path.py`, só código): excursão a favor e contra em R, primeiro toque na invalidação e no alvo, trajetória
+  diária em R (até 30 pontos), e para saída antecipada: se a invalidação já tinha sido tocada antes da saída, e o que o preço fez depois
+  (alvo, invalidação, melhor e pior ponto). Barras de 1 hora até ~700 dias, diário depois. **Referências** (dólar, juros, VIX, índices,
+  commodities, bitcoin): variação entre o último fechamento das 16h NY completo antes do registro e o último antes do fim do caso;
+  um caso de poucas horas sem nenhum fechamento no meio fica sem referências (usar o fechamento do dia seria olhar para o futuro, defeito
+  achado e corrigido durante a verificação). "Notável" = ≥ 3% (VIX ≥ 15%; juros ≥ 0,15 ponto), heurística do app.
+- **Lista fixa `causas-v1`** (`memory/causes.py`): evento_macro, referencia_divergiu, indicador_deu_ruido, invalidacao_ignorada,
+  entrada_tardia, sem_causa_identificavel; mais a visibilidade (visível na época, só ficou claro depois, misto, não se aplica). Esquema
+  de saída estrito, e a causa fora da lista invalida a resposta. Prompt `pm-v1` + esquema + lista entram numa impressão digital travada por teste.
+- **Verificações de código** sobre a resposta (avisos ao lado dela, nunca escondidos): citações conferidas contra o pacote; causa que não se
+  aplica à decisão; "invalidação ignorada" sem saída registrada depois do toque; "evento macro" sem referência notável; "entrada tardia" sem
+  movimento a favor antes; incoerências (sem causa com secundárias, visibilidade × listas).
+- **Casos parecidos** (`memory/similar.py`): pontuação aberta, com motivos: mesmo ativo 3, mesmo mercado 1, setup em comum 2, mesma direção 1
+  (quando conhecida) e 1 por bloco de código com o mesmo lado (alta/baixa; "indistinta" nos dois não conta). Corte de 3 pontos, até 5 casos,
+  e o resumo estatístico usa todos os que passam do corte (por direção).
+- **Alertas estatísticos** (`memory/patterns.py`): reaproveitam as contas da Revisão (Wilson, Newcombe). Cada alerta compara um grupo com o resto
+  (setup, mercado), ou entrou × fora, saída antecipada × mantida, bloco/lente concordando × discordando; só existe com ≥ 10 resolvidas em cada
+  lado e diferença fora do zero; o espelho (grupo contra o resto quando o resto é outro grupo) não vira segundo alerta. A resposta traz
+  quantas comparações foram testadas e quantas o acaso sozinho produziria (5%). A distribuição das causas apontadas pela IA é só uma tabela
+  (classificação da IA, não medição). Hipóteses da IA nunca viram alerta.
+- **Memória na análise com IA** (opção desligada por padrão): usa o prompt **v2** = v1 + a regra 9 sobre `dados.memoria`; a v1 continua o
+  padrão e seu hash segue travado (`a699a8d904ba`), o da v2 também (`a47ba1b6f18c`). A fatia `memoria` leva casos parecidos, estatísticas e
+  avisos, e cada lente recebe só o que ela mesma disse nos casos (isolamento comprovado por teste).
+- **Privacidade (decisão a rever pelo usuário)**: a memória na análise é estruturada e sem texto livre (nada de tese, notas, motivo de saída,
+  decisão ou preços; teste procura esses campos e falha se aparecerem). O pós-mortem, ao contrário, envia a tese e o motivo da saída; a tela
+  avisa antes de cada chamada e o pacote fica gravado.
+- Verificação (2026-10-22): 52 testes novos, suíte de 377 (mutação: vazar a decisão ou as outras lentes derruba 3 testes); 12 teses de exemplo avaliadas
+  contra preços reais pelo próprio app, universo de correlação real, pós-mortem e análise com memória contra um servidor que imita a
+  OpenRouter (HTTP real). O VIX citado num pós-mortem (+21,31% de 15 a 16/10) bate com o fechamento diário do Yahoo (+21,45%). **Nenhum
+  modelo real foi chamado**: a qualidade das causas escolhidas, o custo e o tempo reais ainda precisam ser conferidos com a chave do usuário.
 
 ## 10. Alertas de preço
 
@@ -348,7 +386,7 @@ reais são mais largos — não tratar como evidência. Consequência para o des
 2. Botão de IA com as lentes.
 3. Radar/funil diário com setups definidos pelo usuário.
 4. Painel de revisão (acerto por bloco/lente) e alertas de preço. *(feito: v0.4 alertas, v0.6 revisão; H4 nos setups: v0.7)*
-5. Memória: pós-mortem, recuperação e alertas estatísticos (depende de casos fechados).
+5. Memória: pós-mortem, recuperação e alertas estatísticos (depende de casos fechados). *(feito na v0.8; os alertas só aparecem com dezenas de teses resolvidas)*
 
 ## 17. Em aberto
 

@@ -14,6 +14,7 @@ import {
   type Timeframe,
 } from "../api";
 import CorrelationPanel from "../components/CorrelationPanel";
+import MemoryCard from "../components/MemoryCard";
 import TradingViewChart from "../components/TradingViewChart";
 import { Badge, Card, btnGhost, btnPrimary, inputCls, Field } from "../components/ui";
 import { fmtDate, fmtNum, fmtPct, fmtPrice, roundPrice } from "../format";
@@ -209,6 +210,7 @@ export default function AssetPage({
           onAnalysis={setAi}
           onCorrelation={setCorr}
           chartTf={chartTf}
+          setupNames={setupNames}
         />
       )}
     </div>
@@ -222,6 +224,7 @@ function AssetView({
   onAnalysis,
   onCorrelation,
   chartTf,
+  setupNames,
 }: {
   data: Asset;
   onRegister: () => void;
@@ -229,6 +232,7 @@ function AssetView({
   onAnalysis: (a: AiAnalysis | null) => void;
   onCorrelation: (c: CorrelationData | null) => void;
   chartTf: Timeframe;
+  setupNames: string[];
 }) {
   return (
     <div className="space-y-4">
@@ -262,6 +266,14 @@ function AssetView({
           <ProbabilityCard p={data.probability} />
         </div>
       </div>
+
+      <MemoryCard
+        key={`mem:${data.market}:${data.symbol}`}
+        market={data.market}
+        symbol={data.symbol}
+        horizon={data.probability.horizon_days}
+        setups={setupNames}
+      />
 
       <AiPanel
         key={`ai:${data.market}:${data.symbol}`}

@@ -31,6 +31,7 @@ export default function AiPanel({
   const [error, setError] = useState<string | null>(null);
   const [pkg, setPkg] = useState<unknown>(null);
   const [prompts, setPrompts] = useState<Record<string, string> | null>(null);
+  const [useMemory, setUseMemory] = useState(false);
 
   const loadHistory = useCallback(async () => {
     const list = await api.aiAnalyses(market, symbol);
@@ -57,7 +58,7 @@ export default function AiPanel({
     setError(null);
     setPkg(null);
     try {
-      const a = await api.aiAnalyze(market, symbol, horizon);
+      const a = await api.aiAnalyze(market, symbol, horizon, useMemory);
       setCurrent(a);
       onAnalysis(a);
       await loadHistory();
@@ -83,8 +84,8 @@ export default function AiPanel({
     setPkg((await api.aiAnalysis(current.id)).package ?? null);
   }
 
-  async function showPrompts() {
-    const p = await api.aiPrompts();
+  async function showPrompts(version?: string) {
+    const p = await api.aiPrompts(version ?? (current?.prompt_version === "v2" ? "v2" : "v1"));
     setPrompts(p.prompts[market] ?? {});
   }
 
@@ -115,6 +116,19 @@ export default function AiPanel({
         )}
       </div>
 
+      <label className="mt-3 flex items-start gap-2 text-xs text-zinc-400">
+        <input type="checkbox" className="mt-0.5" checked={useMemory} onChange={(e) => setUseMemory(e.target.checked)} />
+        <span>
+          <span className="text-zinc-200">Usar a memória do diário</span> (prompt {status?.memory_prompt_version ?? "v2"}): cada lente recebe casos
+          parecidos já resolvidos e estatísticas sobre eles. Vai para a OpenRouter, <strong className="text-zinc-300">sem texto livre</strong>: mercado,
+          ativo, direção, mês, desfecho, prazo, motivos da semelhança, o que a própria lente disse na época e a causa do pós-mortem. Não vão tese,
+          notas, decisão nem preços.{" "}
+          <button type="button" className="text-sky-400 hover:underline" onClick={() => void showPrompts("v2")}>
+            Ver o prompt com memória
+          </button>
+        </span>
+      </label>
+
       {status && !status.configured && (
         <p className="mt-3 rounded-md border border-amber-900 bg-amber-950/40 p-3 text-sm text-amber-200">
           A chave da OpenRouter ainda não está configurada. Copie <code>.env.example</code> para <code>.env</code>, preencha{" "}
@@ -126,7 +140,7 @@ export default function AiPanel({
         <p className="mt-3 text-xs text-zinc-500">
           Cada lente recebe só a sua parte dos dados (calculados por código) e responde em JSON com inclinação, confiança,
           evidências citadas, lacunas e o que mudaria a conclusão. Não há veredito final: as lentes podem divergir, e isso é
-          informação. Nada do seu diário é enviado.
+          informação. Sem a memória ligada, nada do seu diário é enviado.
         </p>
       )}
 
@@ -141,7 +155,8 @@ export default function AiPanel({
             {directional.size > 1 && <Badge tone="sky">As lentes divergem entre si</Badge>}
           </div>
           <div className="text-[11px] text-zinc-600">
-            Análise #{current.id} · {fmtDateTime(current.created_at)} · {current.model} · prompt {current.prompt_version} (
+            Análise #{current.id} · {fmtDateTime(current.created_at)} · {current.model}
+            {current.prompt_version === "v2" ? " · com memória" : ""} · prompt {current.prompt_version} (
             {current.prompt_fingerprint}) · horizonte {current.horizon_days} dias · {fmtNum((current.duration_ms ?? 0) / 1000, 1)} s ·{" "}
             {current.prompt_tokens ?? "—"} tokens de entrada, {current.completion_tokens ?? "—"} de saída · custo {fmtUsd(current.cost_usd)}
           </div>

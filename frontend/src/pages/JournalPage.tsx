@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   api,
+  CAUSE_TITLE,
   DECISION_LABEL,
   MARKET_LABEL,
   type Decision,
@@ -12,6 +13,7 @@ import {
   type Stats,
   type Status,
 } from "../api";
+import PostmortemPanel from "../components/PostmortemPanel";
 import { Badge, Card, Field, btnGhost, btnPrimary, inputCls, type Tone } from "../components/ui";
 import { fmtDateTime, fmtPct, fmtPrice, fmtR } from "../format";
 
@@ -58,6 +60,7 @@ export default function JournalPage({ draft }: { draft: Draft | null }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openPm, setOpenPm] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const [e, s] = await Promise.all([api.entries(), api.stats()]);
@@ -249,7 +252,8 @@ export default function JournalPage({ draft }: { draft: Draft | null }) {
               </tr>
             )}
             {entries.map((en) => (
-              <tr key={en.id} className="align-top" title={en.thesis}>
+              <Fragment key={en.id}>
+              <tr className="align-top" title={en.thesis}>
                 <td className="whitespace-nowrap px-3 py-2 text-zinc-400">{fmtDateTime(en.created_at)}</td>
                 <td className="px-3 py-2">
                   <div className="font-medium">{en.symbol}</div>
@@ -265,6 +269,13 @@ export default function JournalPage({ draft }: { draft: Draft | null }) {
                 <td className="px-3 py-2">
                   <Badge tone={STATUS_TONE[en.status]}>{STATUS_TEXT[en.status]}</Badge>
                   {en.r_multiple != null && <span className="ml-2 tabular-nums">{fmtR(en.r_multiple)}</span>}
+                  {en.postmortem_trigger && (
+                    <div className="mt-1 text-xs">
+                      <button className="text-sky-400 hover:underline" onClick={() => setOpenPm(openPm === en.id ? null : en.id)}>
+                        {en.postmortem ? `Pós-mortem: ${CAUSE_TITLE[en.postmortem.causa_principal]}` : "Pós-mortem pendente"}
+                      </button>
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {en.early_exit_at ? (
@@ -288,6 +299,19 @@ export default function JournalPage({ draft }: { draft: Draft | null }) {
                   </button>
                 </td>
               </tr>
+              {openPm === en.id && en.postmortem_trigger && (
+                <tr className="bg-zinc-900/40">
+                  <td colSpan={7} className="px-4 py-4">
+                    <PostmortemPanel
+                      entryId={en.id}
+                      trigger={en.postmortem_trigger}
+                      hasPostmortem={en.postmortem != null}
+                      onChanged={() => void load()}
+                    />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>

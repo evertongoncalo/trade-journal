@@ -134,6 +134,27 @@ CREATE TABLE IF NOT EXISTS ai_analyses (
     duration_ms INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ai_asset ON ai_analyses (market, symbol, id);
+
+-- Pós-mortem de uma tese que falhou ou de uma saída antecipada: a causa vem de uma lista fixa (memory/causes.py).
+CREATE TABLE IF NOT EXISTS postmortems (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,              -- UTC
+    trigger TEXT NOT NULL,                 -- invalidada | saida_antecipada | ambos
+    prompt_version TEXT NOT NULL,
+    prompt_fingerprint TEXT NOT NULL,
+    causes_version TEXT NOT NULL,
+    model TEXT NOT NULL,
+    effort TEXT,
+    package_json TEXT NOT NULL,            -- o que foi enviado ao modelo (auditoria)
+    result_json TEXT NOT NULL,             -- a saída validada
+    checks_json TEXT NOT NULL DEFAULT '[]',-- avisos do código sobre a resposta (citação que não confere etc.)
+    cost_usd REAL,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    duration_ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_pm_entry ON postmortems (entry_id, id);
 """
 
 _UPDATABLE = {

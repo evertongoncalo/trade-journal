@@ -1,8 +1,11 @@
 """Prompts fixos e versionados das lentes de análise.
 
 REGRA: não edite o texto de uma versão publicada. Para mudar qualquer coisa (instruções, lentes, esquema), crie uma
-nova versão (PROMPT_VERSION = "v2"), porque a versão e a impressão digital dos textos são gravadas em cada análise e
-é isso que permite comparar resultados ao longo do tempo. Um teste trava o hash da versão atual.
+nova versão, porque a versão e a impressão digital dos textos são gravadas em cada análise e é isso que permite comparar
+resultados ao longo do tempo. Um teste trava o hash de cada versão.
+
+Versões: "v1" é a original e o padrão. "v2" é a v1 mais uma regra sobre a fatia `memoria` (casos parecidos do diário e
+estatísticas); só é usada quando o usuário liga a memória na análise, então a v1 segue intacta e comparável.
 """
 from __future__ import annotations
 
@@ -10,7 +13,8 @@ import hashlib
 import json
 from dataclasses import dataclass
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v1"  # a versão padrão
+PROMPT_VERSIONS = ("v1", "v2")
 
 BASE = """Você é uma "lente" de análise dentro de um app que apoia as decisões de um operador humano. Sua tarefa é interpretar um pacote de dados e dizer para que lado os dados DESTA lente inclinam o preço no horizonte indicado em `ativo.horizonte_dias`. Você não decide nada: não dá ordem de compra ou venda, não dá veredito final e não considera outras lentes.
 
@@ -24,6 +28,13 @@ Regras:
 7. Cada evidência cita `campo` (caminho com pontos até o dado no pacote, por exemplo `dados.indicadores.valores.rsi14`; use [i] para posição em lista, por exemplo `dados.price_action.ultimas_barras.linhas[0][4]`) e `valor` (o valor exatamente como está no pacote, escrito como texto). Cite só campos que existem. `aponta_para` diz para onde AQUELE dado inclina: "alta", "baixa" ou "neutro".
 8. Em `lacunas` liste o que faltou para uma leitura melhor. Em `mudaria_a_conclusao` liste condições observáveis nos dados que mudariam a inclinação.
 9. Seja direto, em português, com no máximo duas frases em `resumo`. Responda somente com o JSON do esquema."""
+
+MEMORY_RULE = """9. Memória (`dados.memoria`, só existe nesta versão): casos ANTERIORES do próprio diário do operador, escolhidos por código por semelhança de estado, e estatísticas calculadas por código sobre eles. É contexto, nunca prova: poucos casos são indício, não regra (olhe `n` e os `avisos`). Cada caso tem desfecho e, às vezes, a causa de falha classificada por outra IA (hipótese, não medida). `sua_lente_dizia` é o que ESTA lente disse naquele caso. Não conclua que o passado vai se repetir. Se a memória contradiz os dados atuais desta lente, mencione e prefira "indistinta". Se usar a memória, cite o campo (por exemplo `dados.memoria.estatisticas[0].taxa_acerto`) e registre em `lacunas` quando a amostra for pequena.
+10. Seja direto"""
+
+# v2 = v1 com a regra de memória encaixada antes da regra final (o texto da v1 não é tocado).
+BASE_V2 = BASE.replace("9. Seja direto", MEMORY_RULE, 1)
+_BASES = {"v1": BASE, "v2": BASE_V2}
 
 MARKET_NOTES = {
     "acoes": (
@@ -135,9 +146,9 @@ LENS_SCHEMA = {
 }
 
 
-def system_prompt(market: str, lens_id: str) -> str:
+def system_prompt(market: str, lens_id: str, version: str = PROMPT_VERSION) -> str:
     lens = LENSES[lens_id]
-    return f"{BASE}\n\n## Mercado\n{MARKET_NOTES[market]}\n\n## Sua lente: {lens.title}\n{lens.instructions}"
+    return f"{_BASES[version]}\n\n## Mercado\n{MARKET_NOTES[market]}\n\n## Sua lente: {lens.title}\n{lens.instructions}"
 
 
 def user_message(lens_package: dict) -> str:
@@ -145,13 +156,13 @@ def user_message(lens_package: dict) -> str:
     return f"Pacote de dados (JSON):\n{body}"
 
 
-def all_prompts() -> dict[str, dict[str, str]]:
-    return {m: {lens: system_prompt(m, lens) for lens in ids} for m, ids in MARKET_LENSES.items()}
+def all_prompts(version: str = PROMPT_VERSION) -> dict[str, dict[str, str]]:
+    return {m: {lens: system_prompt(m, lens, version) for lens in ids} for m, ids in MARKET_LENSES.items()}
 
 
-def fingerprint() -> str:
-    """Impressão digital de todos os textos e do esquema desta versão (12 primeiros caracteres do SHA-256)."""
+def fingerprint(version: str = PROMPT_VERSION) -> str:
+    """Impressão digital de todos os textos e do esquema de uma versão (12 primeiros caracteres do SHA-256)."""
     blob = json.dumps(
-        {"version": PROMPT_VERSION, "prompts": all_prompts(), "schema": LENS_SCHEMA}, ensure_ascii=False, sort_keys=True
+        {"version": version, "prompts": all_prompts(version), "schema": LENS_SCHEMA}, ensure_ascii=False, sort_keys=True
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]

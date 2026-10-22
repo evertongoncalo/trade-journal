@@ -3,10 +3,11 @@ import type { AlertDraft, Draft, Market, Timeframe } from "./api";
 import AlertsPage from "./pages/AlertsPage";
 import AssetPage, { type AssetRequest } from "./pages/AssetPage";
 import JournalPage from "./pages/JournalPage";
+import MemoryPage from "./pages/MemoryPage";
 import ReviewPage from "./pages/ReviewPage";
 import ScannerPage from "./pages/ScannerPage";
 
-type Tab = "scanner" | "ativo" | "alertas" | "diario" | "revisao";
+type Tab = "scanner" | "ativo" | "alertas" | "diario" | "revisao" | "memoria";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("scanner");
@@ -56,6 +57,9 @@ export default function App() {
             <button className={tabCls("revisao")} onClick={() => setTab("revisao")}>
               Revisão
             </button>
+            <button className={tabCls("memoria")} onClick={() => setTab("memoria")}>
+              Memória
+            </button>
           </nav>
         </div>
       </header>
@@ -85,6 +89,9 @@ export default function App() {
         </div>
         <div hidden={tab !== "revisao"}>
           <ReviewPage active={tab === "revisao"} />
+        </div>
+        <div hidden={tab !== "memoria"}>
+          <MemoryPage active={tab === "memoria"} />
         </div>
       </main>
     </div>

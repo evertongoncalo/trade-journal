@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 from .. import db
 from ..alerts import service as alert_service
 from ..journal.evaluate import Plan, evaluate_plan, r_multiple, validate_plan
+from ..memory import postmortem, store as memory_store
 from ..providers import registry
 from ..providers.base import ProviderError
 from ..providers.symbols import SymbolError, normalize
@@ -39,10 +40,12 @@ def _plan(row: dict) -> Plan:
     )
 
 
-def _present(row: dict) -> dict:
+def _present(row: dict, pms: dict | None = None) -> dict:
     d = dict(row)
     d["snapshot"] = json.loads(d.pop("snapshot_json") or "{}")
     d["risk"] = abs(d["entry_price"] - d["invalidation"])
+    d["postmortem_trigger"] = postmortem.trigger_label(row)  # None: o caso não pede pós-mortem
+    d["postmortem"] = postmortem.brief((pms or {}).get(row["id"]))
     return clean_json(d)
 
 
@@ -74,7 +77,8 @@ class EarlyExitIn(BaseModel):
 
 @router.get("")
 def list_entries():
-    return [_present(r) for r in db.all_entries()]
+    pms = memory_store.latest_by_entry()
+    return [_present(r, pms) for r in db.all_entries()]
 
 
 @router.post("", status_code=201)
@@ -149,7 +153,7 @@ def early_exit(entry_id: int, body: EarlyExitIn):
         early_exit_r=r_multiple(_plan(row), body.price),
     )
     alert_service.cancel_for_entry(entry_id, "saída antecipada registrada")
-    return _present(db.get_entry(entry_id))
+    return _present(db.get_entry(entry_id), memory_store.latest_by_entry())
 
 
 @router.delete("/{entry_id}", status_code=204)
@@ -157,6 +161,7 @@ def delete_entry(entry_id: int):
     if not db.delete_entry(entry_id):
         raise HTTPException(404, "Registro não encontrado")
     alert_service.cancel_for_entry(entry_id, "registro excluído")
+    memory_store.delete_for_entry(entry_id)
 
 
 def _group(rows: list[dict], key) -> dict:

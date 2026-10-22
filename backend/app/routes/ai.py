@@ -23,6 +23,7 @@ class AnalyzeIn(BaseModel):
     market: Literal["acoes", "cripto", "forex"]
     symbol: str
     horizon: int = Field(default=10, ge=1, le=60)
+    memory: bool = False  # usa o prompt v2 e entrega casos parecidos do diário (sem texto livre) às lentes
 
 
 @router.get("/status")
@@ -33,19 +34,23 @@ def status():
         "effort": config.AI_REASONING_EFFORT or None,
         "prompt_version": prompts.PROMPT_VERSION,
         "prompt_fingerprint": prompts.fingerprint(),
+        "memory_prompt_version": "v2",
+        "memory_prompt_fingerprint": prompts.fingerprint("v2"),
         "lenses": {m: [{"id": i, "title": prompts.LENSES[i].title} for i in ids] for m, ids in prompts.MARKET_LENSES.items()},
         "avg_cost_usd": store.recent_avg_cost(),
     }
 
 
 @router.get("/prompts")
-def show_prompts():
-    """Os textos fixos desta versão, para você ler exatamente o que a IA recebe como instrução."""
+def show_prompts(version: str = prompts.PROMPT_VERSION):
+    """Os textos fixos de uma versão (v1 padrão; v2 = com memória), para ler exatamente o que a IA recebe como instrução."""
+    if version not in prompts.PROMPT_VERSIONS:
+        raise HTTPException(404, f"Versão desconhecida: {version!r}")
     return {
-        "version": prompts.PROMPT_VERSION,
-        "fingerprint": prompts.fingerprint(),
+        "version": version,
+        "fingerprint": prompts.fingerprint(version),
         "schema": prompts.LENS_SCHEMA,
-        "prompts": prompts.all_prompts(),
+        "prompts": prompts.all_prompts(version),
     }
 
 
@@ -56,7 +61,7 @@ def analyze(body: AnalyzeIn):
     except SymbolError as exc:
         raise HTTPException(422, str(exc)) from exc
     try:
-        result = runner.analyze(body.market, sym, body.horizon)
+        result = runner.analyze(body.market, sym, body.horizon, memory=body.memory)
     except AIError as exc:
         raise HTTPException(HTTP_STATUS.get(exc.kind, 502), exc.message) from exc
     except ProviderError as exc:

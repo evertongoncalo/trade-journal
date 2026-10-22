@@ -86,6 +86,8 @@ export interface Asset {
   } | null;
 }
 
+export type PmTrigger = "invalidada" | "saida_antecipada" | "ambos";
+
 export interface Entry {
   id: number;
   created_at: string;
@@ -110,6 +112,9 @@ export interface Entry {
   early_exit_r: number | null;
   last_evaluated_at: string | null;
   risk: number;
+  /** Por que o caso pede pós-mortem (null: não pede). */
+  postmortem_trigger: PmTrigger | null;
+  postmortem: PostmortemBrief | null;
 }
 
 export interface NewEntry {
@@ -443,6 +448,8 @@ export interface AiStatus {
   effort: string | null;
   prompt_version: string;
   prompt_fingerprint: string;
+  memory_prompt_version: string;
+  memory_prompt_fingerprint: string;
   lenses: Record<Market, { id: string; title: string }[]>;
   avg_cost_usd: number | null;
 }
@@ -530,6 +537,184 @@ export interface Review {
   avisos: string[];
 }
 
+// ---- Memória da IA ----
+
+export type CauseId =
+  | "evento_macro"
+  | "referencia_divergiu"
+  | "indicador_deu_ruido"
+  | "invalidacao_ignorada"
+  | "entrada_tardia"
+  | "sem_causa_identificavel";
+/** A lista é fixa e versionada no backend (causas-v1): estes títulos a espelham. */
+export const CAUSE_TITLE: Record<CauseId, string> = {
+  evento_macro: "Evento macro",
+  referencia_divergiu: "Referência divergiu",
+  indicador_deu_ruido: "Indicador deu ruído",
+  invalidacao_ignorada: "Invalidação ignorada",
+  entrada_tardia: "Entrada tardia",
+  sem_causa_identificavel: "Sem causa identificável",
+};
+export type Visibility = "visivel_na_epoca" | "so_ficou_claro_depois" | "misto" | "nao_se_aplica";
+export const VISIBILITY_TEXT: Record<Visibility, string> = {
+  visivel_na_epoca: "Já era visível na época",
+  so_ficou_claro_depois: "Só ficou claro depois",
+  misto: "Parte visível, parte só depois",
+  nao_se_aplica: "Não se aplica",
+};
+export const TRIGGER_TEXT: Record<PmTrigger, string> = {
+  invalidada: "Tese invalidada",
+  saida_antecipada: "Saída antecipada",
+  ambos: "Invalidada e com saída antecipada",
+};
+
+export interface CauseInfo {
+  id: CauseId;
+  title: string;
+  definition: string;
+  only_if_entered: boolean;
+}
+
+export interface PostmortemBrief {
+  id: number;
+  created_at: string;
+  causa_principal: CauseId;
+  causas_secundarias: CauseId[];
+  visibilidade: Visibility;
+  confianca: "baixa" | "media" | "alta";
+  resumo: string;
+  avisos: number;
+  model: string;
+  cost_usd: number | null;
+}
+
+export interface Postmortem {
+  id: number;
+  entry_id: number;
+  created_at: string;
+  trigger: PmTrigger;
+  prompt_version: string;
+  prompt_fingerprint: string;
+  causes_version: string;
+  model: string;
+  effort: string | null;
+  result: {
+    causa_principal: CauseId;
+    causas_secundarias: CauseId[];
+    visibilidade: Visibility;
+    confianca: "baixa" | "media" | "alta";
+    resumo: string;
+    o_que_era_visivel: string[];
+    o_que_so_ficou_claro_depois: string[];
+    evidencias: { campo: string; valor: string; leitura: string; verificada: boolean | null; motivo_da_verificacao: string }[];
+    hipoteses: string[];
+    o_que_faltou: string[];
+  };
+  checks: { tipo: "nao_se_aplica" | "sem_base" | "incoerente" | "citacao"; mensagem: string }[];
+  cost_usd: number | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  duration_ms: number | null;
+  package?: unknown;
+}
+
+export interface AlertSide {
+  rotulo: string;
+  alvo: number;
+  invalidada: number;
+  fechadas: number;
+  taxa_acerto: number | null;
+  ic95: [number, number] | null;
+  ids: number[];
+}
+
+export interface MemoryAlert {
+  id: string;
+  tipo: "setup" | "mercado" | "decisao" | "saida_antecipada" | "bloco" | "lente";
+  chave: string;
+  titulo: string;
+  texto: string;
+  sentido: "melhor" | "pior";
+  n: number;
+  grupo: AlertSide;
+  contra: AlertSide;
+  diferenca_pp: number;
+  ic95_pp: [number, number];
+}
+
+export interface MemoryAlerts {
+  alertas: MemoryAlert[];
+  testadas: number;
+  distinguiveis: number;
+  esperados_por_acaso: number;
+  minimo_por_grupo: number;
+  registros: number;
+  resolvidas: number;
+}
+
+export interface EligibleEntry {
+  id: number;
+  market: Market;
+  symbol: string;
+  direction: Direction;
+  decision: Decision;
+  setup: string;
+  created_at: string;
+  status: Status;
+  closed_at: string | null;
+  r_multiple: number | null;
+  early_exit_at: string | null;
+  early_exit_r: number | null;
+  trigger: PmTrigger | null;
+  postmortem: PostmortemBrief | null;
+}
+
+export interface MemoryOverview {
+  causas: { versao: string; lista: CauseInfo[] };
+  elegiveis: EligibleEntry[];
+  pendentes: number;
+  distribuicao_das_causas: {
+    n: number;
+    amostra: "insuficiente" | "pequena" | "ok";
+    itens: { causa: CauseId; titulo: string; n: number; taxa: number; ic95: [number, number] }[];
+    visibilidade: Partial<Record<Visibility, number>>;
+    nota: string;
+  };
+  alertas: MemoryAlerts;
+  ia: { configured: boolean; model: string; prompt_version: string; prompt_fingerprint: string; avg_cost_usd: number | null };
+}
+
+export interface SimilarCase {
+  id: number;
+  mercado: Market;
+  simbolo: string;
+  direcao: Direction;
+  decisao: Decision;
+  registrado_em: string;
+  setup: string;
+  desfecho: Status;
+  r: number | null;
+  dias_ate_desfecho: number | null;
+  pontos: number;
+  por_que_parecido: string[];
+  blocos: Record<string, string>;
+  pos_mortem: { causa: CauseId; visibilidade: Visibility; confianca: "baixa" | "media" | "alta" } | null;
+}
+
+export interface AssetMemory {
+  estado_atual: Record<string, string>;
+  historico_do_ativo: ReviewCell;
+  setups: (ReviewCell & { setup: string })[];
+  parecidos: {
+    casos: SimilarCase[];
+    total_parecidos: number;
+    grupo: { todos: ReviewCell; teses_de_alta: ReviewCell; teses_de_baixa: ReviewCell };
+    criterio: { minimo_de_pontos: number; maximo_de_casos: number };
+  };
+  alertas_aplicaveis: MemoryAlert[];
+  comparacoes: { testadas: number; distinguiveis: number; esperados_por_acaso: number; minimo_por_grupo: number };
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
   if (!res.ok) {
@@ -558,13 +743,24 @@ export const api = {
       { method: "POST", body: JSON.stringify(body) },
     ),
   aiStatus: () => request<AiStatus>("/api/ai/status"),
-  aiAnalyze: (market: Market, symbol: string, horizon: number) =>
-    request<AiAnalysis>("/api/ai/analyze", { method: "POST", body: JSON.stringify({ market, symbol, horizon }) }),
+  aiAnalyze: (market: Market, symbol: string, horizon: number, memory = false) =>
+    request<AiAnalysis>("/api/ai/analyze", { method: "POST", body: JSON.stringify({ market, symbol, horizon, memory }) }),
   aiAnalyses: (market: Market, symbol: string) =>
     request<AiAnalysis[]>(`/api/ai/analyses?market=${market}&symbol=${encodeURIComponent(symbol)}`),
   aiAnalysis: (id: number) => request<AiAnalysis>(`/api/ai/analyses/${id}`),
-  aiPrompts: () =>
-    request<{ version: string; fingerprint: string; prompts: Record<string, Record<string, string>> }>("/api/ai/prompts"),
+  aiPrompts: (version = "v1") =>
+    request<{ version: string; fingerprint: string; prompts: Record<string, Record<string, string>> }>(
+      `/api/ai/prompts?version=${version}`,
+    ),
+  memory: () => request<MemoryOverview>("/api/memory"),
+  memoryPrompt: () =>
+    request<{ version: string; fingerprint: string; causes_version: string; prompt: string }>("/api/memory/prompt"),
+  runPostmortem: (entryId: number) => request<Postmortem>(`/api/memory/postmortem/${entryId}`, { method: "POST" }),
+  postmortem: (entryId: number) => request<Postmortem>(`/api/memory/postmortem/${entryId}`),
+  assetMemory: (market: Market, symbol: string, horizon: number, setups: string[]) =>
+    request<AssetMemory>(
+      `/api/memory/asset/${market}/${encodeURIComponent(symbol)}?horizon=${horizon}&setups=${encodeURIComponent(setups.join(","))}`,
+    ),
   alerts: () => request<PriceAlert[]>("/api/alerts"),
   alertsStatus: () => request<AlertsStatus>("/api/alerts/status"),
   createAlert: (body: NewAlert) => request<PriceAlert>("/api/alerts", { method: "POST", body: JSON.stringify(body) }),

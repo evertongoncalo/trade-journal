@@ -10,7 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Callable
 
-from .. import config
+from .. import config, db
+from ..memory import context as memory_context, store as memory_store
 from . import client, package as package_mod, prompts, store, verify
 from .client import AIError, ChatResult
 
@@ -59,11 +60,11 @@ def validate_output(obj: dict) -> dict:
     }
 
 
-def run_lens(market: str, lens: prompts.Lens, lens_package: dict, chat: Chat) -> dict:
+def run_lens(market: str, lens: prompts.Lens, lens_package: dict, chat: Chat, version: str = prompts.PROMPT_VERSION) -> dict:
     started = time.monotonic()
     base = {"lente": lens.id, "titulo": lens.title}
     try:
-        res = chat(prompts.system_prompt(market, lens.id), prompts.user_message(lens_package), prompts.LENS_SCHEMA)
+        res = chat(prompts.system_prompt(market, lens.id, version), prompts.user_message(lens_package), prompts.LENS_SCHEMA)
         out = validate_output(res.data)
         out["evidencias"] = verify.verify_evidences(lens_package, out["evidencias"])
         checked = [e["verificada"] for e in out["evidencias"]]
@@ -87,13 +88,19 @@ def run_lens(market: str, lens: prompts.Lens, lens_package: dict, chat: Chat) ->
     return {**base, "status": "erro", "erro": err, "uso": None, "duracao_ms": int((time.monotonic() - started) * 1000)}
 
 
-def lens_packages(pkg: dict, lens_ids: list[str]) -> dict[str, dict]:
-    """Cada lente recebe só a parte comum e as suas fatias (isolamento: uma não influencia a outra)."""
+def lens_packages(pkg: dict, lens_ids: list[str], memory: bool = False) -> dict[str, dict]:
+    """Cada lente recebe só a parte comum e as suas fatias (isolamento: uma não influencia a outra).
+
+    Com memória, ganha também `memoria` recortada para ela: nos casos, só o que a própria lente disse (memory.context.for_lens).
+    """
     common = {k: pkg[k] for k in ("ativo", "saude_dados", "avisos")}
-    return {
-        lid: {**common, "dados": {s: pkg["fatias"][s] for s in prompts.LENSES[lid].slices if s in pkg["fatias"]}}
-        for lid in lens_ids
-    }
+    out = {}
+    for lid in lens_ids:
+        dados = {s: pkg["fatias"][s] for s in prompts.LENSES[lid].slices if s in pkg["fatias"]}
+        if memory and "memoria" in pkg["fatias"]:
+            dados["memoria"] = memory_context.for_lens(pkg["fatias"]["memoria"], lid)
+        out[lid] = {**common, "dados": dados}
+    return out
 
 
 def analyze(
@@ -103,8 +110,12 @@ def analyze(
     *,
     chat: Chat | None = None,
     build: Callable[..., dict] | None = None,
+    memory: bool = False,
 ) -> dict:
-    """Roda todas as lentes do mercado. Levanta AIError (sem chave, ou todas as lentes falharam)."""
+    """Roda todas as lentes do mercado. Levanta AIError (sem chave, ou todas as lentes falharam).
+
+    `memory=True` usa o prompt v2 e entrega a cada lente os casos parecidos do diário (ver memory/context.py).
+    """
     if chat is None:
         if not client.configured():
             raise AIError("sem_chave", "Defina OPENROUTER_API_KEY no arquivo .env e reinicie o app.")
@@ -114,10 +125,13 @@ def analyze(
     lens_ids = prompts.MARKET_LENSES[market]
     slices = {s for lid in lens_ids for s in prompts.LENSES[lid].slices}
     pkg = (build or package_mod.build)(market, symbol, horizon, slices)
-    per_lens = lens_packages(pkg, lens_ids)
+    version = "v2" if memory else prompts.PROMPT_VERSION
+    if memory:
+        pkg["fatias"]["memoria"] = memory_context.build(pkg, db.all_entries(), memory_store.latest_by_entry())
+    per_lens = lens_packages(pkg, lens_ids, memory)
 
     with ThreadPoolExecutor(max_workers=len(lens_ids)) as pool:
-        results = list(pool.map(lambda lid: run_lens(market, prompts.LENSES[lid], per_lens[lid], chat), lens_ids))
+        results = list(pool.map(lambda lid: run_lens(market, prompts.LENSES[lid], per_lens[lid], chat, version), lens_ids))
 
     ok = [r for r in results if r["status"] == "ok"]
     if not ok:
@@ -130,8 +144,8 @@ def analyze(
         "market": market,
         "symbol": pkg["ativo"]["simbolo"],
         "horizon_days": horizon,
-        "prompt_version": prompts.PROMPT_VERSION,
-        "prompt_fingerprint": prompts.fingerprint(),
+        "prompt_version": version,
+        "prompt_fingerprint": prompts.fingerprint(version),
         "model": config.AI_MODEL,
         "effort": config.AI_REASONING_EFFORT or None,
         "lenses": results,
