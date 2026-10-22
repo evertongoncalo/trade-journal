@@ -6,7 +6,7 @@ __pycache__/
 
 # Dados locais e segredos (nunca versionar)
 .env
-data/
+/data/
 *.db
 
 # Node
