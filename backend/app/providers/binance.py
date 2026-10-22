@@ -12,7 +12,7 @@ import pandas as pd
 from .base import COLUMNS, PriceHistory, ProviderError
 
 BASES = ("https://api.binance.com", "https://data-api.binance.vision")
-STEP_MS = {"1h": 3_600_000, "1d": 86_400_000}
+STEP_MS = {"1m": 60_000, "1h": 3_600_000, "1d": 86_400_000}
 LIMIT = 1000
 
 
@@ -39,7 +39,7 @@ class BinanceProvider:
         if interval not in STEP_MS:
             raise ProviderError(f"Intervalo não suportado: {interval}")
         now_ms = int(time.time() * 1000)
-        cursor = now_ms - days * 86_400_000
+        cursor = int(now_ms - days * 86_400_000)
         rows: list = []
         while cursor < now_ms:
             batch = _get(

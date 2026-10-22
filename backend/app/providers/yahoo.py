@@ -12,6 +12,7 @@ from .base import COLUMNS, PriceHistory, ProviderError
 from .symbols import yahoo_symbol
 
 MAX_DAYS_1H = 725  # limite do Yahoo para dados de 1 hora
+MAX_DAYS_1M = 6  # o Yahoo só guarda ~7 dias de dados de 1 minuto
 
 
 class YahooProvider:
@@ -21,6 +22,8 @@ class YahooProvider:
         ysym, note = yahoo_symbol(market, symbol)
         if interval == "1h":
             days = min(days, MAX_DAYS_1H)
+        elif interval == "1m":
+            days = min(days, MAX_DAYS_1M)
         start = datetime.now(timezone.utc) - timedelta(days=days)
         try:
             with warnings.catch_warnings():

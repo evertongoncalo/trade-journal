@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from .. import db
+from ..alerts import service as alert_service
 from ..journal.evaluate import Plan, evaluate_plan, r_multiple, validate_plan
 from ..providers import registry
 from ..providers.base import ProviderError
@@ -86,7 +87,15 @@ def create_entry(body: EntryIn):
     data["symbol"] = sym
     data["snapshot_json"] = json.dumps(data.pop("snapshot"), ensure_ascii=False, default=str)
     data["created_at"] = _now().isoformat()
-    return _present(db.get_entry(db.insert_entry(data)))
+    row = db.get_entry(db.insert_entry(data))
+    try:  # os alertas dos níveis do plano nunca podem impedir o registro no diário
+        created = alert_service.create_plan_alerts(row)
+    except Exception:
+        created = []
+    return {
+        **_present(row),
+        "alerts": [{"id": a["id"], "kind": a["kind"], "price": a["price"], "direction": a["direction"]} for a in created],
+    }
 
 
 @router.post("/refresh")
@@ -112,6 +121,7 @@ def refresh():
             fields = {"last_evaluated_at": now.isoformat()}
             if out.status != "aberta":
                 changed += 1
+                alert_service.cancel_for_entry(row["id"], f"tese encerrada: {out.status}")
                 fields.update(
                     status=out.status,
                     closed_at=out.closed_at.isoformat() if out.closed_at else None,
@@ -138,6 +148,7 @@ def early_exit(entry_id: int, body: EarlyExitIn):
         early_exit_reason=body.reason,
         early_exit_r=r_multiple(_plan(row), body.price),
     )
+    alert_service.cancel_for_entry(entry_id, "saída antecipada registrada")
     return _present(db.get_entry(entry_id))
 
 
@@ -145,6 +156,7 @@ def early_exit(entry_id: int, body: EarlyExitIn):
 def delete_entry(entry_id: int):
     if not db.delete_entry(entry_id):
         raise HTTPException(404, "Registro não encontrado")
+    alert_service.cancel_for_entry(entry_id, "registro excluído")
 
 
 def _group(rows: list[dict], key) -> dict:

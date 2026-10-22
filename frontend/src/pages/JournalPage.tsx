@@ -103,7 +103,7 @@ export default function JournalPage({ draft }: { draft: Draft | null }) {
   function submit(e: FormEvent) {
     e.preventDefault();
     void run(async () => {
-      await api.createEntry({
+      const created = await api.createEntry({
         market: form.market,
         symbol: form.symbol,
         decision: form.decision,
@@ -118,7 +118,11 @@ export default function JournalPage({ draft }: { draft: Draft | null }) {
       });
       setForm(EMPTY);
       setSnapshot({});
-      return "Registrado no diário.";
+      const n = created.alerts?.length ?? 0;
+      const kinds = (created.alerts ?? []).map((a) => ({ entrada: "entrada", invalidacao: "invalidação", alvo: "alvo", avulso: "avulso" })[a.kind]);
+      return n > 0
+        ? `Registrado no diário. ${n} alertas de preço criados (${kinds.join(", ")}): veja na aba Alertas.`
+        : "Registrado no diário.";
     });
   }
 

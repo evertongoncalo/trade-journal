@@ -319,6 +319,66 @@ export interface CorrelationData {
   charts: CorrCharts;
 }
 
+export type AlertKind = "avulso" | "entrada" | "invalidacao" | "alvo";
+export type AlertDirection = "acima" | "abaixo";
+export type AlertResponse = "entrei" | "ignorei" | "observando";
+
+export interface PriceAlert {
+  id: number;
+  created_at: string;
+  market: Market;
+  symbol: string;
+  price: number;
+  direction: AlertDirection;
+  note: string;
+  kind: AlertKind;
+  entry_id: number | null;
+  status: "ativo" | "disparado" | "cancelado";
+  base_price: number | null;
+  last_price: number | null;
+  last_checked_at: string | null;
+  distance_pct: number | null;
+  triggered_at: string | null;
+  trigger_bar: string | null;
+  triggered_price: number | null;
+  notified_at: string | null;
+  notify_ok: boolean | null;
+  notify_detail: string | null;
+  response: AlertResponse | null;
+  response_note: string | null;
+  response_at: string | null;
+  cancel_reason: string | null;
+}
+
+export interface AlertsStatus {
+  active: number;
+  pending: number;
+  watcher: {
+    running: boolean;
+    interval: number;
+    last_cycle_at: string | null;
+    last_error: string | null;
+    cycles: number;
+    errors: Record<string, string>;
+  };
+  notifications: { available: boolean; detail: string };
+}
+
+export interface NewAlert {
+  market: Market;
+  symbol: string;
+  price: number;
+  direction: AlertDirection;
+  note: string;
+}
+
+/** Pedido para abrir o formulário de alerta já preenchido (vem da ficha do ativo). */
+export interface AlertDraft {
+  market: Market;
+  symbol: string;
+  price: number;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
   if (!res.ok) {
@@ -340,7 +400,20 @@ export const api = {
     request<Asset>(`/api/asset/${market}/${encodeURIComponent(symbol)}?horizon=${horizon}`),
   entries: () => request<Entry[]>("/api/journal"),
   stats: () => request<Stats>("/api/journal/stats"),
-  createEntry: (body: NewEntry) => request<Entry>("/api/journal", { method: "POST", body: JSON.stringify(body) }),
+  createEntry: (body: NewEntry) =>
+    request<Entry & { alerts?: { id: number; kind: AlertKind; price: number; direction: AlertDirection }[] }>(
+      "/api/journal",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  alerts: () => request<PriceAlert[]>("/api/alerts"),
+  alertsStatus: () => request<AlertsStatus>("/api/alerts/status"),
+  createAlert: (body: NewAlert) => request<PriceAlert>("/api/alerts", { method: "POST", body: JSON.stringify(body) }),
+  cancelAlert: (id: number) => request<PriceAlert>(`/api/alerts/${id}/cancel`, { method: "POST" }),
+  respondAlert: (id: number, response: AlertResponse) =>
+    request<PriceAlert>(`/api/alerts/${id}/respond`, { method: "POST", body: JSON.stringify({ response }) }),
+  deleteAlert: (id: number) => request<void>(`/api/alerts/${id}`, { method: "DELETE" }),
+  checkAlertsNow: () => request<{ fired: PriceAlert[] }>("/api/alerts/check", { method: "POST" }),
+  testNotification: () => request<{ ok: boolean; detail: string }>("/api/alerts/test-notification", { method: "POST" }),
   refresh: () => request<RefreshResult>("/api/journal/refresh", { method: "POST" }),
   earlyExit: (id: number, price: number, reason: string) =>
     request<Entry>(`/api/journal/${id}/early-exit`, { method: "POST", body: JSON.stringify({ price, reason }) }),

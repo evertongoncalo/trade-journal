@@ -168,6 +168,23 @@ Limites conhecidos: viés retrospectivo e histórias plausíveis (daí a lista f
 - **O atraso do alerta é o atraso do dado.** Para preço exato é preciso fonte em tempo real.
 - Só dispara com o app ligado. Notificação no Windows; opcional: bot do Telegram (token criado pelo usuário).
 
+Implementação (v0.4):
+- A vigilância roda dentro do servidor (thread em segundo plano, a cada 60 s; `ALERT_POLL_SECONDS`). Só vigia com o app ligado;
+  ao ligar, o primeiro ciclo cobre o período em que ficou desligado, com barras de 1 min (até 36 h), 1 h (até 25 dias) ou 1 dia.
+- Dispara pela máxima (alerta "acima") ou mínima ("abaixo") das barras de 1 min que começam depois da criação do alerta; cada
+  alerta dispara uma só vez.
+- Alerta avulso exige direção coerente com o preço atual (acima só se o preço está abaixo do nível).
+- Níveis do plano: "entrei" → invalidação e alvo; "observando" → também a entrada, se estiver a mais de 0,1% do preço atual;
+  "não entrei" → nenhum. Quando alvo ou invalidação dispara, o outro é cancelado; ao encerrar a tese, registrar saída antecipada
+  ou excluir o registro, os alertas do plano são cancelados.
+- Notificação: toast do Windows via PowerShell (sem dependências); clicar abre o app. Botão "Testar notificação" na tela.
+- Ao disparar, o app pergunta o que o usuário fez (entrei / ignorei / observando) e guarda a resposta; o contador de pendentes
+  aparece na aba e no título da janela.
+- Atraso medido em 22/10/2026 (barras de 1 min): cripto (Binance) 0,5 min; ações dos EUA (Yahoo) 0,5 min; EURUSD 1,5 min;
+  ouro (futuro) 10,5 min; em medição anterior, DXY ~11 min e DAX ~16 min.
+- Validado com dados reais: detecção por pavio (fechamento acima do nível, mínima tocando) e recuperação de 3 dias de janela.
+- Não implementado: Telegram e e-mail.
+
 ## 11. Gráficos
 
 - Gráfico de preço: **widget do TradingView embutido por iframe** (gratuito, hospedado por eles, dados deles).

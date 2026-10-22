@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { api, MARKET_LABEL, type Asset, type Draft, type Market, type Probability, type ProbLabel } from "../api";
+import {
+  api,
+  MARKET_LABEL,
+  type AlertDraft,
+  type Asset,
+  type Draft,
+  type Market,
+  type Probability,
+  type ProbLabel,
+} from "../api";
 import CorrelationPanel from "../components/CorrelationPanel";
 import TradingViewChart from "../components/TradingViewChart";
 import { Badge, Card, btnGhost, btnPrimary, inputCls, Field } from "../components/ui";
@@ -52,9 +61,11 @@ function draftFrom(a: Asset, setups: string[]): Draft {
 
 export default function AssetPage({
   onRegister,
+  onAlert,
   request,
 }: {
   onRegister: (d: Draft) => void;
+  onAlert: (d: AlertDraft) => void;
   request: AssetRequest | null;
 }) {
   const [market, setMarket] = useState<Market>("acoes");
@@ -148,12 +159,18 @@ export default function AssetPage({
           ))}
         </div>
       )}
-      {data && <AssetView data={data} onRegister={() => onRegister(draftFrom(data, setupNames))} />}
+      {data && (
+        <AssetView
+          data={data}
+          onRegister={() => onRegister(draftFrom(data, setupNames))}
+          onAlert={() => onAlert({ market: data.market, symbol: data.symbol, price: roundPrice(data.price) })}
+        />
+      )}
     </div>
   );
 }
 
-function AssetView({ data, onRegister }: { data: Asset; onRegister: () => void }) {
+function AssetView({ data, onRegister, onAlert }: { data: Asset; onRegister: () => void; onAlert: () => void }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -162,9 +179,14 @@ function AssetView({ data, onRegister }: { data: Asset; onRegister: () => void }
           <Badge tone="sky">{MARKET_LABEL[data.market]}</Badge>
           <span className="text-xl tabular-nums">{fmtPrice(data.price)}</span>
         </div>
-        <button className={btnGhost} onClick={onRegister}>
-          Registrar no diário
-        </button>
+        <div className="flex gap-2">
+          <button className={btnGhost} onClick={onAlert}>
+            Criar alerta de preço
+          </button>
+          <button className={btnGhost} onClick={onRegister}>
+            Registrar no diário
+          </button>
+        </div>
       </div>
       <HealthBar health={data.health} />
 

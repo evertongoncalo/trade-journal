@@ -16,15 +16,16 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 2. **Ativo**: abrir um achado leva à ficha completa (gráfico, indicadores, inclinação probabilística, painel de correlação).
 3. **Diário**: registrar a decisão (entrei / não entrei / observando) com tese, invalidação e alvo; o app acompanha o resultado.
 
-## Status (v0.3)
+## Status (v0.4)
 
 | Pronto | Ainda não |
 |---|---|
 | **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis, lista filtrável, falhas reportadas | Botão de IA (lentes) e memória/pós-mortem |
-| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Alertas de preço |
+| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Alertas por Telegram ou e-mail |
 | Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Revisão do acerto por bloco e por lente |
 | Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | Timeframe H4 nos setups |
 | Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | |
+| **Alertas de preço:** avulsos e níveis do plano do diário, detecção por máxima/mínima, notificação do Windows | |
 
 ### Scanner
 
@@ -38,6 +39,20 @@ Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
   vantagem sobre entradas aleatórias**: eles existem para você editar e para o diário medir.
 - A primeira varredura real (22/10/2026) levou ~95 s e listou 172 achados em 171 ativos (29% do universo): setups largos listam
   muito. Aperte as condições ou use os filtros da lista.
+
+### Alertas de preço
+
+- **Avulsos** (ativo, nível, direção, nota) ou **gerados pelo diário**: ao registrar uma tese, a invalidação e o alvo viram
+  alertas (e a entrada, se você está só observando e ela está longe do preço atual). Quando um dos dois toca, o outro é
+  cancelado; encerrar a tese, sair antes ou excluir o registro também cancela.
+- **Detecção pela máxima e pela mínima** das barras de 1 minuto: um pavio que toca o nível dispara, mesmo se o fechamento
+  ficou do outro lado. Cada alerta dispara uma vez.
+- **Notificação do Windows** (toast via PowerShell; clicar abre o app). Use "Testar notificação" na aba Alertas. O modo
+  "Não incomodar" do Windows manda o aviso direto para a central de notificações.
+- Ao disparar, o app pergunta o que você fez (entrei / ignorei / observando); o contador de pendentes aparece na aba.
+- **Só vigia com o app aberto** (o servidor). Ao ligar, confere o que aconteceu enquanto esteve desligado.
+- **O atraso do alerta é o atraso do dado.** Medido em 22/10/2026: cripto (Binance) e ações dos EUA (Yahoo) ~1 min; forex 1 a 2 min;
+  ouro (futuro), DXY e índices europeus 10 a 15 min. Variáveis: `ALERT_POLL_SECONDS` (padrão 60), `ALERTS_WATCHER=0` para desligar.
 
 ### Painel de correlação
 
@@ -89,12 +104,13 @@ cd backend
 
 ```
 backend/app/
+  alerts/       alertas de preço: regra de disparo, vigilância em segundo plano, notificação do Windows
   scanner/      universo, catálogo de condições, setups, varredura em segundo plano
   correlation/  universo de candidatos, alinhamento 16h NY, motor de correlação
   providers/    fontes de preço atrás de uma interface comum (Yahoo, Binance) + símbolos
   analysis/     indicadores (RSI/ATR de Wilder, MACD, Bollinger) e inclinação probabilística
   journal/      avaliação do plano de uma tese (alvo × invalidação × horizonte, em R)
-  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal)
+  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal, /api/alerts)
 backend/scripts/ atualização das listas de ações
 frontend/src/   React + TypeScript + Tailwind, tema escuro
 docs/           especificação

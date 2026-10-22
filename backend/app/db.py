@@ -82,6 +82,36 @@ CREATE TABLE IF NOT EXISTS scan_hits (
     opened_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scan_hits_run ON scan_hits (run_id);
+
+-- Alertas de preço: avulsos ou gerados pelos níveis do plano de um registro do diário.
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,              -- UTC
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    price REAL NOT NULL,                   -- nível observado
+    direction TEXT NOT NULL,               -- acima (máxima >= nível) | abaixo (mínima <= nível)
+    note TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT 'avulso',   -- avulso | entrada | invalidacao | alvo
+    entry_id INTEGER,                      -- registro do diário que originou o alerta
+    status TEXT NOT NULL DEFAULT 'ativo',  -- ativo | disparado | cancelado
+    base_price REAL,                       -- preço no momento da criação
+    checked_until TEXT,                    -- início da última barra já verificada (UTC)
+    last_price REAL,                       -- último fechamento visto pela vigilância
+    last_checked_at TEXT,
+    triggered_at TEXT,                     -- quando o app detectou
+    trigger_bar TEXT,                      -- início da barra em que o nível foi tocado
+    triggered_price REAL,                  -- extremo da barra (máxima ou mínima)
+    notified_at TEXT,
+    notify_ok INTEGER,
+    notify_detail TEXT,
+    response TEXT,                         -- o que o usuário fez: entrei | ignorei | observando
+    response_note TEXT,
+    response_at TEXT,
+    cancel_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts (status);
+CREATE INDEX IF NOT EXISTS idx_alerts_entry ON alerts (entry_id);
 """
 
 _UPDATABLE = {

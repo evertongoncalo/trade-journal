@@ -27,4 +27,9 @@ def _path(env: str, default: str) -> Path:
 
 
 DB_PATH = _path("JOURNAL_DB_PATH", "data/journal.db")
+
+# Alertas de preço: a vigilância roda dentro do servidor (só vigia com o app ligado).
+ALERTS_WATCHER = os.environ.get("ALERTS_WATCHER", "1") != "0"
+ALERT_POLL_SECONDS = float(os.environ.get("ALERT_POLL_SECONDS", "60"))
+APP_URL = os.environ.get("APP_URL", "http://127.0.0.1:8765/")  # aberto ao clicar na notificação
 FRONTEND_DIST = _path("FRONTEND_DIST", "frontend/dist")
