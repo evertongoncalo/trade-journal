@@ -125,6 +125,99 @@ export interface Draft {
   invalidation: number;
   target: number;
   snapshot: Record<string, unknown>;
+  setup?: string;
+}
+
+export interface ParamSpec {
+  name: string;
+  label: string;
+  default: number;
+  step: number;
+  min: number | null;
+  max: number | null;
+}
+
+export interface ConditionSpec {
+  id: string;
+  title: string;
+  needs_volume: boolean;
+  params: ParamSpec[];
+}
+
+export interface SetupCondition {
+  type: string;
+  params: Record<string, number>;
+}
+
+export interface SetupDefinition {
+  required: SetupCondition[];
+  confirmations: SetupCondition[];
+  min_confirmations: number;
+  filters: { min_price: number; min_dollar_volume: number };
+}
+
+export interface Setup {
+  id: number;
+  name: string;
+  enabled: boolean;
+  direction: Direction;
+  markets: Market[];
+  definition: SetupDefinition;
+}
+
+export type SetupInput = Omit<Setup, "id">;
+
+export interface ScanHit {
+  id: number;
+  run_id: number;
+  setup_id: number | null;
+  setup_name: string;
+  market: Market;
+  symbol: string;
+  direction: Direction;
+  price: number | null;
+  name: string | null;
+  opened_at: string | null;
+  details: {
+    price: number;
+    as_of: string;
+    rsi14: number | null;
+    macd_hist: number | null;
+    trend: string;
+    atr_pct: number | null;
+    volume_ratio: number | null;
+    bb_pctb: number | null;
+    required: string[];
+    confirmations: string[];
+    confirmations_applicable: number;
+    not_applicable: string[];
+  };
+}
+
+export interface ScanRun {
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  state: string;
+  markets: Market[];
+  setups: string[];
+  symbols_total: number;
+  symbols_ok: number;
+  errors?: Record<string, string>;
+  errors_count: number;
+  as_of: Record<string, string | null>;
+  error: string | null;
+}
+
+export interface ScanStatus {
+  state: "idle" | "running" | "done" | "error";
+  phase: string;
+  done: number;
+  total: number;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  run_id: number | null;
 }
 
 export interface GroupStats {
@@ -254,6 +347,22 @@ export const api = {
   remove: (id: number) => request<void>(`/api/journal/${id}`, { method: "DELETE" }),
   correlation: (market: Market, symbol: string) =>
     request<CorrelationData>(`/api/correlation/${market}/${encodeURIComponent(symbol)}`),
+  scannerCatalog: () => request<ConditionSpec[]>("/api/scanner/catalog"),
+  scannerSetups: () => request<Setup[]>("/api/scanner/setups"),
+  saveSetup: (id: number | null, body: SetupInput) =>
+    request<Setup>(id == null ? "/api/scanner/setups" : `/api/scanner/setups/${id}`, {
+      method: id == null ? "POST" : "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteSetup: (id: number) => request<void>(`/api/scanner/setups/${id}`, { method: "DELETE" }),
+  scannerRun: (markets: Market[]) =>
+    request<{ started: boolean; status: ScanStatus }>("/api/scanner/run", {
+      method: "POST",
+      body: JSON.stringify({ markets }),
+    }),
+  scannerStatus: () => request<ScanStatus>("/api/scanner/status"),
+  scannerLatest: () => request<{ run: ScanRun | null; hits: ScanHit[] }>("/api/scanner/runs/latest"),
+  hitOpened: (id: number) => request<void>(`/api/scanner/hits/${id}/opened`, { method: "POST" }),
   correlationStatus: () => request<{ refresh: RefreshStatus; universe: UniverseState }>("/api/correlation/status"),
   correlationRefresh: () =>
     request<{ started: boolean; refresh: RefreshStatus }>("/api/correlation/refresh", { method: "POST" }),

@@ -46,6 +46,19 @@ Lista de ativos por mercado: **a definir pelo usuário** (editável no app).
 
 Qualquer ativo também pode ser aberto manualmente, fora do funil.
 
+Implementação (v0.3): o scanner é a porta de entrada do app (aba inicial).
+- Universo: S&P 500 + Nasdaq-100 (518 ações; listas em `app/scanner/data`, atualizáveis por `scripts/update_universes.py`),
+  as ~60 criptos mais líquidas da Binance (volume 24h ≥ US$ 10 mi, sem stablecoins nem tokens alavancados) e 29 pares de forex
+  (7 majors, 21 minors e o ouro).
+- Dados: diário, ~2 anos, só barras já fechadas (corte no último 16:00 de Nova York; cripto pelo `closeTime` da Binance).
+  Ativos que falham são listados no resultado, nunca engolidos (defeito do scanner antigo).
+- Setup = condições obrigatórias (todas) + confirmações (mínimo configurável) + filtros de liquidez (só ações). Catálogo de ~20
+  condições; as de volume são ignoradas em forex.
+- Os 3 setups iniciais traduzem o scanner antigo sem score e em timeframe diário (o antigo usava RSI/MACD em H4; H4 ainda não
+  existe aqui). Sem evidência de que superem o acaso (seção 14).
+- Primeira varredura real (2026-10-22): 601 ativos em 95 s; 172 achados em 171 ativos (29% do universo). Setups largos listam muito.
+- Resultados ficam no SQLite (varredura + achados). Abrir um achado registra a abertura e leva o nome do setup ao diário.
+
 ## 5. Análise por código (botão "Analisar", sem IA)
 
 ### 5.1 Blocos

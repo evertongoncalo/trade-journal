@@ -1,18 +1,25 @@
 import { useState } from "react";
-import type { Draft } from "./api";
-import AssetPage from "./pages/AssetPage";
+import type { Draft, Market } from "./api";
+import AssetPage, { type AssetRequest } from "./pages/AssetPage";
 import JournalPage from "./pages/JournalPage";
+import ScannerPage from "./pages/ScannerPage";
 
-type Tab = "ativo" | "diario";
+type Tab = "scanner" | "ativo" | "diario";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("ativo");
+  const [tab, setTab] = useState<Tab>("scanner");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [request, setRequest] = useState<AssetRequest | null>(null);
 
   const tabCls = (t: Tab) =>
     `rounded-md px-3 py-1.5 text-sm font-medium ${
       tab === t ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"
     }`;
+
+  function openAsset(market: Market, symbol: string, setups: string[]) {
+    setRequest({ market, symbol, setups, nonce: Date.now() });
+    setTab("ativo");
+  }
 
   return (
     <div className="min-h-screen">
@@ -22,6 +29,9 @@ export default function App() {
             Trade Journal <span className="font-normal text-zinc-500">· análise e diário de decisões</span>
           </h1>
           <nav className="flex gap-1">
+            <button className={tabCls("scanner")} onClick={() => setTab("scanner")}>
+              Scanner
+            </button>
             <button className={tabCls("ativo")} onClick={() => setTab("ativo")}>
               Ativo
             </button>
@@ -32,9 +42,13 @@ export default function App() {
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6">
-        {/* As duas páginas ficam montadas para não perder o estado ao trocar de aba. */}
+        {/* As páginas ficam montadas para não perder o estado ao trocar de aba. */}
+        <div hidden={tab !== "scanner"}>
+          <ScannerPage onOpen={openAsset} />
+        </div>
         <div hidden={tab !== "ativo"}>
           <AssetPage
+            request={request}
             onRegister={(d) => {
               setDraft(d);
               setTab("diario");

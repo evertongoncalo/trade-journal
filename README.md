@@ -1,31 +1,51 @@
 # Trade Journal
 
-App web local para **analisar ativos (ações, cripto, forex) e registrar as próprias decisões**, para descobrir
-se "setup + decisão humana" é viável. Nada é automático: o app nunca opera. A pergunta central não é lucro,
-é **acerto da tese e qualidade de decisão**.
+App web local para **varrer o mercado atrás dos seus setups, analisar os ativos encontrados e registrar as próprias
+decisões**, para descobrir se "setup + decisão humana" é viável. Nada é automático: o app nunca opera. A pergunta central
+não é lucro, é **acerto da tese e qualidade de decisão**.
 
 > Ferramenta de apoio à decisão do próprio usuário; não é recomendação de investimento.
 > Probabilidades mostradas são frequências históricas, não garantias.
 
 Desenho completo: [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 
-## Status (v0.2)
+## Fluxo (funil)
+
+1. **Scanner** (aba inicial): varre ~600 ativos (S&P 500 + Nasdaq-100, as cripto mais líquidas da Binance, forex majors/minors
+   e ouro) atrás dos seus **setups** e lista o que encontrou.
+2. **Ativo**: abrir um achado leva à ficha completa (gráfico, indicadores, inclinação probabilística, painel de correlação).
+3. **Diário**: registrar a decisão (entrei / não entrei / observando) com tese, invalidação e alvo; o app acompanha o resultado.
+
+## Status (v0.3)
 
 | Pronto | Ainda não |
 |---|---|
-| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Funil / radar diário com setups |
-| Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Botão de IA (lentes) e memória/pós-mortem |
-| Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | Alertas de preço |
-| Acerto da tese por decisão (entrei / não entrei / observando) | Revisão do acerto por bloco e por lente |
-| **Painel de correlação (só código):** S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, estabilidade, parecer e 3 gráficos | |
+| **Scanner:** varredura do universo inteiro em segundo plano, setups editáveis, lista filtrável, falhas reportadas | Botão de IA (lentes) e memória/pós-mortem |
+| Ficha do ativo: gráfico (widget do TradingView), indicadores, saúde dos dados | Alertas de preço |
+| Inclinação probabilística (P(alta em N dias \| estado) com amostra, intervalo e base) | Revisão do acerto por bloco e por lente |
+| Painel de correlação (só código): S&P 500 e DXY fixos + ~40 candidatos, alinhados às 16h de Nova York, parecer e gráficos | Timeframe H4 nos setups |
+| Diário: registro, acompanhamento automático do resultado (alvo × invalidação × expirada), saída antecipada | |
+
+### Scanner
+
+- **Universo:** 518 ações (listas em `backend/app/scanner/data`, atualizáveis com `scripts/update_universes.py`), as ~60 criptos
+  mais líquidas da Binance (volume 24h ≥ US$ 10 mi, sem stablecoins nem tokens alavancados) e 29 pares de forex.
+- **Dados:** diário, ~2 anos, **só barras já fechadas**. Ativos que falham aparecem no resultado ("2 falhas"), nunca em silêncio.
+- **Setup** = condições obrigatórias (todas) + confirmações (mínimo configurável) + filtros de liquidez (só ações). Catálogo de
+  ~20 condições (RSI, MACD, tendência, médias, volume, Bollinger, ATR, distância da máxima...). Condições de volume são
+  ignoradas em forex.
+- Os três setups iniciais são as regras do scanner antigo, sem score e em timeframe diário. **O backtest feito antes não achou
+  vantagem sobre entradas aleatórias**: eles existem para você editar e para o diário medir.
+- A primeira varredura real (22/10/2026) levou ~95 s e listou 172 achados em 171 ativos (29% do universo): setups largos listam
+  muito. Aperte as condições ou use os filtros da lista.
 
 ### Painel de correlação
 
-Na primeira vez, clique em **Atualizar universo** (30 s a 2 min): ele baixa o universo de candidatos (índices, juros, VIX,
-commodities, cripto, forex, ETFs de setor) e guarda no SQLite local. Cada ativo é amostrado a partir de dados de 1 hora
-na última barra que fecha às 16h de Nova York, para que forex, cripto e bolsas sejam comparados no mesmo instante.
-Relações mecânicas (par de forex com moeda em comum, DXY × par com USD, ação × ETF do próprio setor) ficam marcadas e
-escondidas por padrão. A janela é de ~2 anos (limite do dado de 1 hora do Yahoo).
+Na primeira vez, clique em **Atualizar universo** (30 s a 2 min): ele baixa os candidatos (índices, juros, VIX, commodities,
+cripto, forex, ETFs de setor) e guarda no SQLite local. Cada ativo é amostrado a partir de dados de 1 hora na última barra
+que fecha às 16h de Nova York, para que forex, cripto e bolsas sejam comparados no mesmo instante. Relações mecânicas (par de
+forex com moeda em comum, DXY × par com USD, ação × ETF do próprio setor) ficam marcadas e escondidas por padrão. A janela é
+de ~2 anos (limite do dado de 1 hora do Yahoo).
 
 ## Como rodar (Windows)
 
@@ -42,7 +62,8 @@ cd ..
 iniciar.cmd
 ```
 
-Abra <http://127.0.0.1:8765>. Os dados do diário ficam em `data/journal.db` (fora do git; faça backup desse arquivo).
+Abra <http://127.0.0.1:8765>. Os dados (diário, setups, varreduras) ficam em `data/journal.db` (fora do git; faça backup).
+Se a porta 8765 estiver ocupada por uma execução anterior, encerre o processo antes de iniciar de novo.
 
 ### Desenvolvimento
 
@@ -68,12 +89,15 @@ cd backend
 
 ```
 backend/app/
-  providers/   fontes de preço atrás de uma interface comum (Yahoo, Binance) + símbolos
-  analysis/    indicadores (RSI/ATR de Wilder, MACD, Bollinger) e inclinação probabilística
-  journal/     avaliação do plano de uma tese (alvo × invalidação × horizonte, em R)
-  routes/      API (/api/asset, /api/journal)
-frontend/src/  React + TypeScript + Tailwind, tema escuro
-docs/          especificação
+  scanner/      universo, catálogo de condições, setups, varredura em segundo plano
+  correlation/  universo de candidatos, alinhamento 16h NY, motor de correlação
+  providers/    fontes de preço atrás de uma interface comum (Yahoo, Binance) + símbolos
+  analysis/     indicadores (RSI/ATR de Wilder, MACD, Bollinger) e inclinação probabilística
+  journal/      avaliação do plano de uma tese (alvo × invalidação × horizonte, em R)
+  routes/       API (/api/scanner, /api/asset, /api/correlation, /api/journal)
+backend/scripts/ atualização das listas de ações
+frontend/src/   React + TypeScript + Tailwind, tema escuro
+docs/           especificação
 ```
 
 ## Dados e limites conhecidos
@@ -83,6 +107,7 @@ docs/          especificação
 - Ouro spot (`XAUUSD`) não existe no Yahoo: os cálculos usam o futuro `GC=F`, enquanto o gráfico do TradingView mostra o spot da OANDA.
   Os dois diferem um pouco.
 - O widget do TradingView é só exibição: o app não lê valores dele nem desenha níveis nele.
+- Barras diárias de forex podem ficar em formação até ~17h de Nova York; o corte do scanner é o último 16:00 de Nova York.
 - O dado de 1 hora do Yahoo vai até ~730 dias; a avaliação do diário usa 1h quando possível e diário como reserva.
 - O intervalo de confiança da inclinação assume amostras independentes e usa um único ativo: amostras pequenas aparecem como "sem dados".
 

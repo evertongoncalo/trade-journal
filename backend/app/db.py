@@ -44,6 +44,44 @@ CREATE TABLE IF NOT EXISTS closes_meta (
     updated_at TEXT NOT NULL,              -- UTC, ISO 8601
     rows INTEGER NOT NULL
 );
+
+-- Scanner: setups do usuário, varreduras e os ativos encontrados em cada uma.
+CREATE TABLE IF NOT EXISTS setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    direction TEXT NOT NULL,               -- alta | baixa
+    markets TEXT NOT NULL,                 -- JSON: ["acoes","cripto","forex"]
+    definition_json TEXT NOT NULL,         -- JSON: obrigatórias, confirmações, filtros
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS scan_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    state TEXT NOT NULL,                   -- running | done | error
+    markets TEXT NOT NULL,                 -- JSON
+    setups_json TEXT NOT NULL DEFAULT '[]',-- JSON: nomes dos setups avaliados
+    symbols_total INTEGER NOT NULL DEFAULT 0,
+    symbols_ok INTEGER NOT NULL DEFAULT 0,
+    errors_json TEXT NOT NULL DEFAULT '{}',-- JSON: "mercado:símbolo" -> motivo
+    as_of_json TEXT NOT NULL DEFAULT '{}', -- JSON: mercado -> data da última barra usada
+    error TEXT
+);
+CREATE TABLE IF NOT EXISTS scan_hits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    setup_id INTEGER,
+    setup_name TEXT NOT NULL,
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    price REAL,
+    details_json TEXT NOT NULL,
+    opened_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_scan_hits_run ON scan_hits (run_id);
 """
 
 _UPDATABLE = {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, MARKET_LABEL, type Asset, type Draft, type Market, type Probability, type ProbLabel } from "../api";
 import CorrelationPanel from "../components/CorrelationPanel";
 import TradingViewChart from "../components/TradingViewChart";
@@ -14,7 +14,15 @@ const LABEL_TEXT: Record<ProbLabel, string> = {
 const LABEL_TONE = { alta: "emerald", baixa: "rose", indistinta: "zinc", "sem dados": "amber" } as const;
 const PLACEHOLDER: Record<Market, string> = { acoes: "NVDA", cripto: "BTCUSDT", forex: "EURUSD ou XAUUSD" };
 
-function draftFrom(a: Asset): Draft {
+/** Pedido vindo do scanner para abrir um ativo já analisado. */
+export interface AssetRequest {
+  market: Market;
+  symbol: string;
+  setups: string[];
+  nonce: number;
+}
+
+function draftFrom(a: Asset, setups: string[]): Draft {
   const long = a.snapshot.trend !== "baixa";
   const step = a.snapshot.atr14 ?? a.price * 0.02;
   return {
@@ -24,6 +32,7 @@ function draftFrom(a: Asset): Draft {
     entry_price: roundPrice(a.price),
     invalidation: roundPrice(long ? a.price - 1.5 * step : a.price + 1.5 * step),
     target: roundPrice(long ? a.price + 3 * step : a.price - 3 * step),
+    setup: setups.join(" + ") || undefined,
     snapshot: {
       price: a.price,
       indicators: a.snapshot,
@@ -41,32 +50,54 @@ function draftFrom(a: Asset): Draft {
   };
 }
 
-export default function AssetPage({ onRegister }: { onRegister: (d: Draft) => void }) {
+export default function AssetPage({
+  onRegister,
+  request,
+}: {
+  onRegister: (d: Draft) => void;
+  request: AssetRequest | null;
+}) {
   const [market, setMarket] = useState<Market>("acoes");
   const [symbol, setSymbol] = useState("NVDA");
   const [horizon, setHorizon] = useState(10);
   const [data, setData] = useState<Asset | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [setupNames, setSetupNames] = useState<string[]>([]);
 
-  async function analyze(e?: FormEvent) {
-    e?.preventDefault();
-    if (!symbol.trim()) return;
+  const analyze = useCallback(async (m: Market, s: string, h: number) => {
+    if (!s.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      setData(await api.asset(market, symbol.trim(), horizon));
+      setData(await api.asset(m, s.trim(), h));
     } catch (err) {
       setData(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    setSetupNames([]); // busca manual: sem setup de origem
+    void analyze(market, symbol, horizon);
   }
+
+  // abre o ativo escolhido no scanner e já analisa
+  useEffect(() => {
+    if (!request) return;
+    setMarket(request.market);
+    setSymbol(request.symbol);
+    setSetupNames(request.setups);
+    void analyze(request.market, request.symbol, horizon);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request, analyze]);
 
   return (
     <div className="space-y-6">
-      <form onSubmit={analyze} className="flex flex-wrap items-end gap-3">
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         <Field label="Mercado" className="w-36">
           <select className={inputCls} value={market} onChange={(e) => setMarket(e.target.value as Market)}>
             {(Object.keys(MARKET_LABEL) as Market[]).map((m) => (
@@ -103,10 +134,21 @@ export default function AssetPage({ onRegister }: { onRegister: (d: Draft) => vo
       )}
       {!data && !error && !loading && (
         <p className="text-sm text-zinc-500">
-          Escolha o mercado e o símbolo e clique em Analisar. Tudo aqui é calculado por código, sem IA.
+          O caminho principal é o Scanner: ele lista o que bate com os seus setups e abre a ficha daqui. Também dá para
+          buscar um ativo à mão: escolha o mercado e o símbolo e clique em Analisar. Tudo aqui é calculado por código, sem IA.
         </p>
       )}
-      {data && <AssetView data={data} onRegister={() => onRegister(draftFrom(data))} />}
+      {setupNames.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+          Veio do scanner:
+          {setupNames.map((n) => (
+            <Badge key={n} tone="emerald">
+              {n}
+            </Badge>
+          ))}
+        </div>
+      )}
+      {data && <AssetView data={data} onRegister={() => onRegister(draftFrom(data, setupNames))} />}
     </div>
   );
 }

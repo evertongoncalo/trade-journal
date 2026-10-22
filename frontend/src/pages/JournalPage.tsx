@@ -79,6 +79,7 @@ export default function JournalPage({ draft }: { draft: Draft | null }) {
       entry: String(draft.entry_price),
       invalidation: String(draft.invalidation),
       target: String(draft.target),
+      setup: draft.setup ?? f.setup,
     }));
     setSnapshot(draft.snapshot);
   }, [draft]);
